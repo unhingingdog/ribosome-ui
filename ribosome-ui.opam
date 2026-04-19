@@ -1,0 +1,10 @@
+opam-version: "2.0"
+depends: [
+  "ocaml"
+  "dune"           { >= "3.17" }
+  "melange"
+  "reason-react"
+  "reason-react-ppx"
+  "melange-json"
+  "melange-json-native"
+]

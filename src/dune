@@ -1,0 +1,6 @@
+(library
+ (name ribosome_ui)
+ (modes melange)
+ (libraries melange melange-json)
+ (preprocess
+  (pps melange.ppx melange-json.ppx)))

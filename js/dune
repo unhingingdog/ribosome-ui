@@ -1,0 +1,5 @@
+(melange.emit
+ (target output)
+ (promote (until-clean))
+ (libraries ribosome_ui)
+ (module_systems es6))

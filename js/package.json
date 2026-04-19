@@ -1,0 +1,22 @@
+{
+  "name": "ribosome-ui",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "scripts": {
+    "prepublish": "dune build",
+    "build:ocaml": "cd .. && dune build",
+    "build:bundle": "rolldown output/src/Parser.js --format esm --file dist",
+    "build": "npm run build:ocaml && npm run build:bundle",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "rolldown": "^1.0.0-rc.16",
+    "vitest": "latest"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  }
+}
