@@ -29,20 +29,26 @@ type text = {
   content: string
 } [@@deriving json]
 
+type broken =
+  | Soft 
+  | Hard of string [@@deriving json]
+
 type container = {
   kind: string;
   id: string;
-  children: container_child list 
-} and container_child = 
-  | Input of input 
-  | Submittable of submittable  
-  | Container of container
-  | Image of image
-  | Text of text [@@deriving json]
-
-type template = 
+  children: template list 
+} and template = 
   | Input of input
   | Submittable of submittable
   | Image of image
   | Text of text 
-  | Container of container [@@deriving json]
+  | Container of container 
+  | Broken of broken
+
+let container_of_json json =
+  let open Melange_json.Of_json in
+  {
+    kind = field "kind" string json;
+    id = field "id" string json;
+    children = []
+  }

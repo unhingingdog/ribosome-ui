@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { attempt_template_parse } from "./output/src/Parser.js";
+import { parse_data } from "./output/src/Parser.js";
 
 // Handle ugly translation from ocaml ADTs
 const unwrap = (result) => {
-  if (result?.TAG === 1) return undefined;
-  return result?._0;
+  if (result?.TAG === 1) return undefined; // Error
+  const value = result?._0;
+  if (value?.TAG === 5) return undefined; // Broken (Soft or Hard)
+  return value;
 };
 
 const exampleTemplate = {
@@ -14,24 +16,42 @@ const exampleTemplate = {
   alt: "test",
 };
 
+const exampleContainer = {
+  kind: "container",
+  id: "2",
+  children: [exampleTemplate],
+};
+
+const corruptChildrenContainer = {
+  kind: "container",
+  id: "3",
+  children: "not an array",
+};
+
+const nonContainerWithChildren = {
+  kind: "image",
+  id: "4",
+  src: "/img.png",
+  alt: "test",
+  children: [exampleTemplate],
+};
+
 describe("Parser", () => {
   it("parses a valid image", () => {
-    const result = unwrap(
-      attempt_template_parse(JSON.stringify(exampleTemplate)),
-    );
+    const result = unwrap(parse_data(JSON.stringify(exampleTemplate)));
     expect(result).toBeDefined();
   });
 
   it("returns undefined for missing field", () => {
     const missingField = structuredClone(exampleTemplate);
     delete missingField.src;
-    const result = unwrap(attempt_template_parse(JSON.stringify(missingField)));
+    const result = unwrap(parse_data(JSON.stringify(missingField)));
     expect(result).toBeUndefined();
   });
 
   it("returns undefined for syntactically invalid json", () => {
     const result = unwrap(
-      attempt_template_parse(
+      parse_data(
         JSON.stringify(exampleTemplate).slice(0, exampleTemplate.length - 2),
       ),
     );
@@ -41,7 +61,22 @@ describe("Parser", () => {
   it("returns undefined for unknown kind", () => {
     const unknownKind = structuredClone(exampleTemplate);
     unknownKind.kind = "huh";
-    const result = unwrap(attempt_template_parse(JSON.stringify(unknownKind)));
+    const result = unwrap(parse_data(JSON.stringify(unknownKind)));
+    expect(result).toBeUndefined();
+  });
+
+  it("parses a container with valid children", () => {
+    const result = unwrap(parse_data(JSON.stringify(exampleContainer)));
+    expect(result).toBeDefined();
+  });
+
+  it("returns undefined for container with corrupt children field", () => {
+    const result = unwrap(parse_data(JSON.stringify(corruptChildrenContainer)));
+    expect(result).toBeUndefined();
+  });
+
+  it("returns undefined for non-container with children", () => {
+    const result = unwrap(parse_data(JSON.stringify(nonContainerWithChildren)));
     expect(result).toBeUndefined();
   });
 });
