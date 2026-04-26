@@ -62,13 +62,14 @@ let is_pop_level_token (token : token) : bool =
   | _ -> false
 
 let handle_pop_state_transition (stack : closing_token list) : json_state =
-  match List.nth_opt stack (List.length stack - 1) with
-  | Some CloseBrace -> Brace (InValue NestedValueComplete)
+  (* Inspect the new top of the stack (last element = innermost remaining opener).
+     List.nth_opt with a negative index throws Invalid_argument, so guard on empty. *)
+  let len = List.length stack in
+  if len = 0 then Pending
+  else match List.nth_opt stack (len - 1) with
+  | Some CloseBrace   -> Brace (InValue NestedValueComplete)
   | Some CloseBracket -> Bracket (InValue NestedValueComplete)
-  | _ -> Pending
-  (* CloseKey / CloseStringData: the lexer has already set the correct
-     state, so falling through to Pending is unreachable in practice —
-     pop-level transitions only fire for CloseBrace / CloseBracket. *)
+  | _                 -> Pending
 
 (* ------------------------------------------------------------------ *)
 (* get_balancing_chars                                                  *)
