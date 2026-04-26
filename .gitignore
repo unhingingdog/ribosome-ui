@@ -6,3 +6,6 @@ js/dist/
 
 # Node
 js/node_modules/
+
+# agent files
+plan.md
