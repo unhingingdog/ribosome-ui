@@ -1,12 +1,8 @@
 open LexerTypes
 open BalancerTypes
 
-(* ------------------------------------------------------------------ *)
-(* Types                                                                *)
-(* ------------------------------------------------------------------ *)
-
 type balancer_state = {
-  closing_stack: closing_token list; (* outermost first *)
+  closing_stack: closing_token list;
   json_state: json_state;
   is_corrupted: bool;
 }
@@ -17,17 +13,11 @@ let create () = {
   is_corrupted = false;
 }
 
-(* ------------------------------------------------------------------ *)
-(* modify_stack                                                         *)
-(* Mirrors modify_stack.rs — collapses the three TryFrom layers into   *)
-(* a single direct match on token.                                      *)
-(* ------------------------------------------------------------------ *)
-
 type stack_result =
   | Pushed  of closing_token list
   | Popped  of closing_token list
-  | Ignored                          (* non-structural token *)
-  | StackCorrupted                   (* mismatched or empty-on-close *)
+  | Ignored 
+  | StackCorrupted
 
 let modify_stack (stack : closing_token list) (token : token) : stack_result =
   match token with
