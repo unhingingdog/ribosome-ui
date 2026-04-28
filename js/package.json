@@ -7,7 +7,7 @@
   "scripts": {
     "prepublish": "dune build",
     "build:ocaml": "cd .. && dune build",
-    "build:bundle": "rolldown output/src/Parser.js output/telomere/Processor.js --format esm --file dist",
+    "build:bundle": "rolldown -c rolldown.config.js",
     "build": "npm run build:ocaml && npm run build:bundle",
     "test": "vitest"
   },
