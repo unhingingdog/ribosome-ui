@@ -1,39 +1,42 @@
-import { resolve } from "path";
-import { readdirSync, existsSync } from "fs";
+import { existsSync, readdirSync } from "fs";
+import { dirname, join, relative, resolve } from "path";
 import { fileURLToPath } from "url";
-import { dirname } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const outputDir = resolve(__dirname, "output");
+const moduleDirs = ["engine", "telomere"];
 
-// Dynamically discover all .js files in output directories
-const getEntryPoints = () => {
-  const points = {};
-  const dirs = ["src", "telomere"];
-  
-  dirs.forEach(dir => {
-    const dirPath = resolve(__dirname, "output", dir);
-    
-    if (existsSync(dirPath)) {
-      try {
-        readdirSync(dirPath)
-          .filter(f => f.endsWith(".js"))
-          .forEach(f => {
-            const name = f.replace(".js", "");
-            points[name] = resolve(dirPath, f);
-          });
-      } catch (e) {
-        console.warn(`Warning: Could not read directory ${dirPath}:`, e.message);
-      }
+const collectJsFiles = (dir) => {
+  if (!existsSync(dir)) return [];
+
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+
+    if (entry.isDirectory()) {
+      return collectJsFiles(path);
     }
+
+    return entry.isFile() && entry.name.endsWith(".js") ? [path] : [];
   });
-  
-  return points;
 };
 
+const input = moduleDirs.flatMap((dir) => collectJsFiles(resolve(outputDir, dir)));
+
+if (input.length === 0) {
+  throw new Error(
+    `No Melange output found under ${moduleDirs
+      .map((dir) => relative(__dirname, resolve(outputDir, dir)))
+      .join(" or ")}. Run npm run build:ocaml first.`,
+  );
+}
+
 export default {
-  input: getEntryPoints(),
+  input,
   output: {
     dir: "dist",
-    format: "esm"
-  }
+    entryFileNames: "[name].js",
+    format: "esm",
+    preserveModules: true,
+    preserveModulesRoot: "output",
+  },
 };

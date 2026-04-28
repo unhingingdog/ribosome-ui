@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parse_data } from "./output/src/Parser.js";
+import { parse_data } from "./dist/engine/Parser.js";
 
 // Handle ugly translation from ocaml ADTs
 const unwrap = (result) => {
