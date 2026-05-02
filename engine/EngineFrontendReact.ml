@@ -63,7 +63,7 @@ type dom_handle =
   | Element of Dom.element 
   | Id of string
 
-let attach handle react_element =
+let create_renderer handle =
   let element = match handle with
     | Element e -> Some e
     | Id id -> ReactDOM.querySelector ("#" ^ id)
@@ -71,5 +71,5 @@ let attach handle react_element =
   match element with
   | Some el -> 
       let root = ReactDOM.Client.createRoot el in
-      Some ((ReactDOM.Client.render root) react_element)
+      Some (ReactDOM.Client.render root)
   | None -> None
