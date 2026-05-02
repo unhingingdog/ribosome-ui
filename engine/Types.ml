@@ -30,7 +30,7 @@ type text = {
 } [@@deriving json]
 
 type broken =
-  | Soft 
+  | Soft  of string
   | Hard of string [@@deriving json]
 
 type container = {

@@ -1,6 +1,6 @@
 (library
  (name ribosome_ui)
  (modes melange)
- (libraries melange melange-json telomere)
+ (libraries melange melange-json telomere reason-react)
  (preprocess
-  (pps melange.ppx melange-json.ppx)))
+  (pps melange.ppx melange-json.ppx reason-react-ppx)))

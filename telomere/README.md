@@ -6,29 +6,29 @@ This is a port from a Rust project: [telomere-json](https://crates.io/crates/tel
 
 ## Usage
 
-The public API is in `Balancer.ml`. State is a plain immutable record - thread it forward on each chunk.
+The top-level streaming API is in `Processor.ml`. State is a plain immutable record - thread it forward on each chunk. The processor keeps the low-level balancer state plus the accumulated input buffer.
 
 ```ocaml
-open Balancer
+open Processor
 
-(* Create a fresh balancer state *)
-let state = create ()
+(* Create a fresh processor state *)
+let state = create_processor ()
 
 (* Feed a chunk of (possibly partial) JSON.
-   Returns Ok (completion, new_state) or Error (error, new_state). *)
-let result = process_delta state "{\"name\":\"Alice\",\"age\""
+   Returns (output, new_state). *)
+let (output, state) = feed state "{\"name\":\"Alice\",\"age\""
 
-match result with
-| Ok (completion, _state) ->
+match output with
+| Completion completion ->
   (* completion = ":42}" — the chars needed to make it valid JSON *)
   Printf.printf "Append: %s\n" completion
-| Error (NotClosable, _state) ->
+| Pending ->
   (* The stream is mid-token (e.g. after a colon, or inside a string).
      Not an error — keep feeding chunks. *)
   ()
-| Error (_, poisoned_state) ->
+| Corrupted ->
   (* Hard error — the JSON is structurally corrupt.
-     poisoned_state.is_corrupted = true; all future calls will fast-path here. *)
+     The internal balancer is poisoned; all future calls will fast-path here. *)
   ()
 ```
 
@@ -37,23 +37,50 @@ match result with
 ```ocaml
 let chunks = ["{\"name\":\"Al"; "ice\",\"sc"; "ore\":42"]
 
-let final_result =
-  List.fold_left (fun acc chunk ->
-    let state = match acc with
-      | Ok (_, s)    -> s
-      | Error (_, s) -> s
-    in
-    process_delta state chunk
-  ) (Ok ("", create ())) chunks
+let (final_output, final_state) =
+  List.fold_left (fun (_, state) chunk ->
+    feed state chunk
+  ) (Pending, create_processor ()) chunks
 
-(* final_result = Ok ("}", state) *)
+(* final_output = Completion "}" *)
 (* Appending "}" produces valid JSON: {"name":"Alice","score":42} *)
+```
+
+The generated JavaScript exports use Melange's OCaml names:
+
+```js
+import { create_processor, feed } from "./dist/telomere/Processor.js";
+
+let state = create_processor();
+let [output, nextState] = feed(state, '{"name":"Alice"');
+```
+
+In the compiled JavaScript representation, `Pending` is the plain number `0`, `Corrupted` is the plain number `1`, and `Completion value` is an object like `{ TAG: 0, _0: value }`.
+
+## Lower-level balancer
+
+`Balancer.ml` is the lower-level API used by `Processor.ml`. Use it directly when you want completion/error details without the accumulated buffer wrapper.
+
+```ocaml
+open Balancer
+
+let state = create ()
+let result = process_delta state "{\"name\":\"Alice\",\"age\""
+
+match result with
+| Ok (completion, _state) ->
+  Printf.printf "Append: %s\n" completion
+| Error (NotClosable, _state) ->
+  ()
+| Error (_, poisoned_state) ->
+  (* poisoned_state.is_corrupted = true *)
+  ()
 ```
 
 ### Error semantics
 
-| Result                                        | Meaning                                                                                   | `is_corrupted` | Action                                           |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------- | ------------------------------------------------ |
-| `Ok (completion, state)`                      | Chunk processed. `completion` closes the JSON.                                            | `false`        | Append completion to render.                     |
-| `Error (NotClosable, state)`                  | Mid-token (after `:`, inside a string, partial literal). Stream is still valid.           | `false`        | Discard completion for this chunk; keep feeding. |
-| `Error (_, state)` where `state.is_corrupted` | Structural error (mismatched brackets, invalid character). Stream is permanently invalid. | `true`         | Stop processing.                                 |
+| Processor output       | Balancer result                                | Meaning                                                                                   | Action                                           |
+| ---------------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `Completion completion` | `Ok (completion, state)`                       | Chunk processed. `completion` closes the JSON.                                            | Append completion to render.                     |
+| `Pending`              | `Error (NotClosable, state)`                   | Mid-token (after `:`, inside a string, partial literal). Stream is still valid.           | Discard completion for this chunk; keep feeding. |
+| `Corrupted`            | `Error (_, state)` where `state.is_corrupted`  | Structural error (mismatched brackets, invalid character). Stream is permanently invalid. | Stop processing.                                 |

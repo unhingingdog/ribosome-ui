@@ -5,7 +5,7 @@ let catch throwable =
   try throwable ()
   with err -> 
     debug "[ribosome parsing] Soft failure - Parsing template instance soft failed: " err;
-    Broken Soft 
+    Broken (Soft "Template parse failed")
 
 let parse_template json =
   let open Melange_json.Of_json in
@@ -18,10 +18,10 @@ let parse_template json =
   | "container" -> catch (fun () -> Container (container_of_json json))
   | kind -> 
     debug "[ribosome parsing] Soft failure - Unknown template kind" kind;
-    Broken Soft
+    Broken (Soft "Unknown template")
   with err ->
     debug "[ribosome parsing] Soft failure -" (Printexc.to_string err);
-    Broken Soft
+    Broken (Soft "Template parse failure")
 
 let serialise_json data = 
   try 

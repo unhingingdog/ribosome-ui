@@ -12,5 +12,11 @@ export default defineConfig({
       "melange.__private__.melange_mini_stdlib": resolve(buildOutput, "melange.__private__.melange_mini_stdlib"),
     },
   },
-  test: {},
+  test: {
+    server: {
+      deps: {
+        inline: ["melange", "melange-json", "melange.js"],
+      },
+    },
+  },
 });
