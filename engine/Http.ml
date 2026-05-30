@@ -17,21 +17,19 @@ let require_body res =
   | None -> reject "HTTP response did not include a body"
   | Some body -> Js.Promise.resolve body
 
-let request_config key body = 
-    (Fetch.RequestInit.make
-      ~method_:Post
-      ~headers:(Fetch.HeadersInit.makeWithArray [|
-        ("Authorization", "Bearer " ^ key);
-        ("Content-Type", "application/json");
-      |])
-      ~body:(Fetch.BodyInit.make body)
-      ())
+let request_config ?(headers=[||]) body =
+  Fetch.RequestInit.make
+    ~method_:Post
+    ~headers:(Fetch.HeadersInit.makeWithArray headers)
+    ~body:(Fetch.BodyInit.make body)
+    ()
 
-let post ~url ~api_key ~body ~on_chunk ~on_done ~on_error =
-  Fetch.fetchWithInit url (request_config api_key body)
+let post ~url ~headers ~body ~on_chunk ~on_done ~on_error =
+  Fetch.fetchWithInit url (request_config ~headers body)
   |> Js.Promise.then_ require_ok
   |> Js.Promise.then_ require_body
   |> Js.Promise.then_ (fun body -> body |> get_reader |> Stream.pump ~on_chunk ~on_done)
   |> Js.Promise.catch (fun exn ->
+    on_done ();
     on_error exn;
     Js.Promise.resolve ())

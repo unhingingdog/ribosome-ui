@@ -22,7 +22,7 @@ let create_sse_state () = {
 let has_data line =
   String.length line >= sse_prefix_len && String.sub line 0 sse_prefix_len = sse_prefix
 
-let extract_data line = 
+let extract_data line =
   if has_data line then
     Some (String.sub line sse_prefix_len (String.length line - sse_prefix_len))
   else None
@@ -71,18 +71,25 @@ let parse_sse_chunk state raw =
 
 let pump ~on_chunk ~on_done reader =
   let decoder = make_decoder () in
+  let done_called = ref false in
+  let finish () =
+    if not !done_called then begin
+      done_called := true;
+      on_done ()
+    end
+  in
   let rec drain state =
     read reader
     |> Js.Promise.then_ (fun result ->
       if result##done_ || state.done_ then begin
-        on_done ();
+        finish ();
         Js.Promise.resolve ()
       end
       else begin
         let events, next_state = result##value |> decode decoder |> parse_sse_chunk state in
         List.iter (function Data payload -> on_chunk payload | Done -> ()) events;
         if next_state.done_ then begin
-          on_done ();
+          finish ();
           Js.Promise.resolve ()
         end else
           drain next_state
