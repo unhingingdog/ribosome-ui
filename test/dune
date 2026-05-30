@@ -1,0 +1,5 @@
+(copy_files ../engine/State.ml)
+
+(test
+ (name state_test)
+ (modules State state_test))
