@@ -1,5 +1,10 @@
 (copy_files ../engine/State.ml)
+(copy_files ../engine/Prompt.ml)
 
 (test
  (name state_test)
  (modules State state_test))
+
+(test
+ (name prompt_test)
+ (modules Prompt prompt_test))
