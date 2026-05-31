@@ -87,7 +87,7 @@ let transition_errored (state: errored state) (action: recover_action): recover_
     | Err (_, FailedRecv payload), Retry ->
       RetryRecv (Receiving payload)
 
-(* These are adapters that get us state -> state. We have to widen the types outside the state machine. *)
+(* These are adapters that handled the necsesary widened types when we keep this machine statefully. *)
 
 type any_state = AnyState : 'phase state -> any_state
 

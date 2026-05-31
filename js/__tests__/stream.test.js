@@ -55,6 +55,43 @@ describe("Stream SSE parser", () => {
     expect(state.pending_line).toBe("");
   });
 
+  it("reconstructs structured JSON split across chunks", () => {
+    let state = create_sse_state();
+    const payloads = [];
+
+    for (const chunk of [
+      'data: {"kind":"container","id":"root","children":[',
+      '{"kind":"text","id":"intro","text_type":"Paragraph",',
+      '"content":"Hello"},{"kind":"input","id":"name",',
+      '"value":{"String":""}}]}\n\n',
+    ]) {
+      const [events, nextState] = parse_sse_chunk(state, chunk);
+      payloads.push(...listToArray(events).map(data));
+      state = nextState;
+    }
+
+    expect(payloads).toHaveLength(1);
+    expect(JSON.parse(payloads[0])).toEqual({
+      kind: "container",
+      id: "root",
+      children: [
+        {
+          kind: "text",
+          id: "intro",
+          text_type: "Paragraph",
+          content: "Hello",
+        },
+        {
+          kind: "input",
+          id: "name",
+          value: { String: "" },
+        },
+      ],
+    });
+    expect(state.pending_line).toBe("");
+    expect(state.done_).toBe(false);
+  });
+
   it("handles multiple data lines in one chunk", () => {
     const [events] = parse_sse_chunk(
       create_sse_state(),
