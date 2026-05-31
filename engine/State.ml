@@ -107,3 +107,49 @@ let state_of_recover_result = function
   | RetrySend state -> AnyState state
   | RetryRecv state -> AnyState state
   | Restarted state -> AnyState state
+
+let kick_off (AnyState state) ~prompt =
+  match state with
+  | Idle ->
+    transition_idle state (Send { prompt })
+    |> state_of_idle_result
+    |> Result.ok
+  | Sending _ | Receiving _ ->
+    Error "Cannot kick off while a request is already in flight"
+  | Err (error, _) ->
+    Error ("Cannot kick off while engine is errored: " ^ error.details)
+
+let receive_chunk (AnyState state) ~chunk =
+  match state with
+  | Sending _ ->
+    transition_sending state (StartRecv { chunk })
+    |> state_of_sending_result
+    |> Result.ok
+  | Receiving _ ->
+    transition_receiving state (Continue { chunk })
+    |> state_of_receiving_result
+    |> Result.ok
+  | Idle ->
+    Error "Cannot receive a chunk before kick off"
+  | Err (error, _) ->
+    Error ("Cannot receive while engine is errored: " ^ error.details)
+
+let complete (AnyState state) =
+  match state with
+  | Receiving _ ->
+    transition_receiving state Complete
+    |> state_of_receiving_result
+    |> Result.ok
+  | Idle -> Error "Cannot complete while engine is idle"
+  | Sending _ -> Error "Cannot complete before receiving a chunk"
+  | Err (error, _) -> Error ("Cannot complete while engine is errored: " ^ error.details)
+
+let fail (AnyState state) details =
+  match state with
+  | Sending _ ->
+    transition_sending state (ErrOut details)
+    |> state_of_sending_result
+  | Receiving _ ->
+    transition_receiving state (ErrOut details)
+    |> state_of_receiving_result
+  | Idle | Err _ -> AnyState state

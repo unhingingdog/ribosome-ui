@@ -131,6 +131,62 @@ let test_state_of_recover_result () =
   | State.AnyState _ ->
     failwith "expected Sending state"
 
+let test_kick_off () =
+  match State.kick_off (State.AnyState State.Idle) ~prompt:"make ui" with
+  | Ok (State.AnyState (State.Sending payload)) ->
+    assert_equal "kick_off stores prompt" "make ui" payload.prompt
+  | Ok (State.AnyState _) ->
+    failwith "expected Sending state"
+  | Error message ->
+    failwith message
+
+let test_kick_off_rejects_in_flight () =
+  match State.kick_off (State.AnyState (State.Sending send_payload)) ~prompt:"again" with
+  | Ok _ -> failwith "expected kick_off rejection"
+  | Error _ -> ()
+
+let test_receive_chunk_starts_receiving () =
+  match State.receive_chunk (State.AnyState (State.Sending send_payload)) ~chunk:"data" with
+  | Ok (State.AnyState (State.Receiving payload)) ->
+    assert_equal "receive_chunk stores first chunk" "data" payload.chunk
+  | Ok (State.AnyState _) ->
+    failwith "expected Receiving state"
+  | Error message ->
+    failwith message
+
+let test_receive_chunk_continues_receiving () =
+  match State.receive_chunk (State.AnyState (State.Receiving recv_payload)) ~chunk:"more" with
+  | Ok (State.AnyState (State.Receiving payload)) ->
+    assert_equal "receive_chunk replaces chunk" "more" payload.chunk
+  | Ok (State.AnyState _) ->
+    failwith "expected Receiving state"
+  | Error message ->
+    failwith message
+
+let test_complete () =
+  match State.complete (State.AnyState (State.Receiving recv_payload)) with
+  | Ok (State.AnyState State.Idle) -> ()
+  | Ok (State.AnyState _) ->
+    failwith "expected Idle state"
+  | Error message ->
+    failwith message
+
+let test_fail_from_sending () =
+  match State.fail (State.AnyState (State.Sending send_payload)) "send failed" with
+  | State.AnyState (State.Err (error, State.FailedSend payload)) ->
+    assert_equal "fail stores send error" "send failed" error.details;
+    assert_equal "fail stores send payload" send_payload payload
+  | State.AnyState _ ->
+    failwith "expected send error state"
+
+let test_fail_from_receiving () =
+  match State.fail (State.AnyState (State.Receiving recv_payload)) "recv failed" with
+  | State.AnyState (State.Err (error, State.FailedRecv payload)) ->
+    assert_equal "fail stores recv error" "recv failed" error.details;
+    assert_equal "fail stores recv payload" recv_payload payload
+  | State.AnyState _ ->
+    failwith "expected recv error state"
+
 let () =
   test_transition_idle ();
   test_transition_sending_start_recv ();
@@ -144,4 +200,11 @@ let () =
   test_state_of_idle_result ();
   test_state_of_sending_result ();
   test_state_of_receiving_result ();
-  test_state_of_recover_result ()
+  test_state_of_recover_result ();
+  test_kick_off ();
+  test_kick_off_rejects_in_flight ();
+  test_receive_chunk_starts_receiving ();
+  test_receive_chunk_continues_receiving ();
+  test_complete ();
+  test_fail_from_sending ();
+  test_fail_from_receiving ()
