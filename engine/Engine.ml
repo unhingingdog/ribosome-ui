@@ -10,12 +10,10 @@ type t = {
   mutable last_error: string option;
 }
 
-let empty_history = { State.messages = [] }
-
 let create config = {
   config;
   renderer = EngineFrontendReact.create_renderer config.root;
-  state = State.AnyState (State.Idle empty_history);
+  state = State.AnyState State.Idle;
   history = [];
   processor = EngineBackend.initial_processor_state;
   last_template = None;

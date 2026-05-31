@@ -1,12 +1,6 @@
 type send_payload = { prompt: string }
 type recv_payload = { chunk: string }
 
-type message = User of string | Bot of string
-
-type history = {
-  messages: message list
-}
-
 type idle
 type sending
 type receiving
@@ -21,10 +15,10 @@ type system_error = {
 }
 
 type _ state = 
-  | Idle : history -> idle state
-  | Sending : history * send_payload -> sending state
-  | Receiving : history * recv_payload -> receiving state
-  | Err : history * system_error * 'a failed -> errored state
+  | Idle : idle state
+  | Sending : send_payload -> sending state
+  | Receiving : recv_payload -> receiving state
+  | Err : system_error * 'a failed -> errored state
 
 
 type send_action =
@@ -66,32 +60,32 @@ type recover_result =
 
 let transition_idle (state: idle state) (action: send_action) : idle_result =
   match state, action with 
-  | Idle history, Send payload -> StartSending (Sending (history, payload))
+  | Idle, Send payload -> StartSending (Sending payload)
 
 let transition_sending (state: sending state) (action: start_recv_action): sending_result =
   match state, action with
-    | Sending (history, _), StartRecv payload ->
-      StartReceiving (Receiving (history, payload))
-    | Sending (history, payload), ErrOut details ->
-      SendErr (Err (history, { details }, FailedSend payload))
+    | Sending _, StartRecv payload ->
+      StartReceiving (Receiving payload)
+    | Sending payload, ErrOut details ->
+      SendErr (Err ({ details }, FailedSend payload))
 
 let transition_receiving (state: receiving state) (action: continue_recv_action): receiving_result =
   match state, action with
-    | Receiving (history, _), Continue payload ->
-      ContinueReceiving (Receiving (history, payload))
-    | Receiving (history, _), Complete ->
-      Done (Idle history)
-    | Receiving (history, payload), ErrOut details ->
-      RecvErr (Err (history, { details }, FailedRecv payload))
+    | Receiving _, Continue payload ->
+      ContinueReceiving (Receiving payload)
+    | Receiving _, Complete ->
+      Done Idle
+    | Receiving payload, ErrOut details ->
+      RecvErr (Err ({ details }, FailedRecv payload))
 
 let transition_errored (state: errored state) (action: recover_action): recover_result =
   match state, action with
-    | Err (_, _, _), Restart ->
-      Restarted (Idle { messages = [] })
-    | Err (history, _, FailedSend payload), Retry ->
-      RetrySend (Sending (history, payload))
-    | Err (history, _, FailedRecv payload), Retry ->
-      RetryRecv (Receiving (history, payload))
+    | Err (_, _), Restart ->
+      Restarted Idle
+    | Err (_, FailedSend payload), Retry ->
+      RetrySend (Sending payload)
+    | Err (_, FailedRecv payload), Retry ->
+      RetryRecv (Receiving payload)
 
 (* These are adapters that get us state -> state. We have to widen the types outside the state machine. *)
 

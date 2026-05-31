@@ -70,7 +70,7 @@ let test_create_llm_prompt () =
     Prompt.create_llm_prompt
       registry
       "Build a lesson UI for biology."
-      "The user wants to compare ribosomes and mitochondria."
+      (Some "The user wants to compare ribosomes and mitochondria.")
   in
   assert_contains "prompt includes task heading" prompt "# Ribosome UI Generation Task";
   assert_contains "prompt includes domain heading" prompt "## Domain Context";
