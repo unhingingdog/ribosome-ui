@@ -30,7 +30,41 @@ let reset_turn t =
   t.last_template <- None;
   t.last_error <- None
 
-let on_chunk _t _payload = ()
+let render_template t template =
+  match t.renderer with
+  | None -> ()
+  | Some render ->
+    EngineFrontendReact.render_template_with_submit
+      template
+      t.config.components
+      (fun _payload -> ())
+    |> render
+
+let on_delta t delta =
+  match State.receive_chunk t.state ~chunk:delta with
+  | Error message ->
+    set_error t message
+  | Ok state ->
+    t.state <- state;
+    (match EngineBackend.handle_chunk delta t.processor with
+    | EngineBackend.Frontend.Pending processor ->
+      t.processor <- processor
+    | EngineBackend.Frontend.Parsed (template, processor) ->
+      t.processor <- processor;
+      t.last_template <- Some template;
+      render_template t template
+    | EngineBackend.Frontend.Failed (message, processor) ->
+      t.processor <- processor;
+      set_error t message)
+
+let on_chunk t payload =
+  match t.config.stream_adapter payload with
+  | Error message ->
+    set_error t message
+  | Ok None -> ()
+  | Ok (Some delta) ->
+    if delta <> "" then
+      on_delta t delta
 
 let on_done _t _reason = ()
 
