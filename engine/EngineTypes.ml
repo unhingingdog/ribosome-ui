@@ -1,9 +1,3 @@
-type public_status =
-  | Idle
-  | Sending
-  | Receiving
-  | Error of string
-
 type chat_role =
   | User
   | Bot
@@ -24,6 +18,8 @@ type request_config = {
   body: string;
 }
 
+type stream_adapter = string -> (string option, string) result
+
 type callbacks = {
   on_submit: SubmitTypes.submission_payload -> unit;
   on_message_complete: Types.template option -> unit;
@@ -36,13 +32,13 @@ type config = {
   templates: Prompt.template_registry;
   goal_prompt: string;
   request: request_context -> request_config;
+  stream_adapter: stream_adapter;
   callbacks: callbacks;
 }
 
 type handle = {
-  send: string -> unit Js.Promise.t;
+  start: string -> unit Js.Promise.t;
   submit: SubmitTypes.submission_payload -> unit Js.Promise.t;
   reset: unit -> unit;
-  status: unit -> public_status;
   history: unit -> chat_message list;
 }
