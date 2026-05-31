@@ -4,9 +4,16 @@ open Types
 type 'props component = 'props -> element
 type 'props component_match = ('props component * 'props)
 
+type submittable_props = {
+  kind: string;
+  id: string;
+  value: input list;
+  on_submit: SubmitTypes.submission_payload -> unit;
+}
+
 type template_component = 
   | Input of input component
-  | Submittable of submittable component
+  | Submittable of submittable_props component
   | Image of image component
   | Text of text component
   | Container of container component
@@ -14,7 +21,7 @@ type template_component =
 
 type component_registry = {
   input: input component option;
-  submittable: submittable component option;
+  submittable: submittable_props component option;
   image: image component option;
   text: text component option;
   container: container component;
@@ -27,10 +34,21 @@ let render component props =
 let broken_message component_type =
   ("Used missing component: " ^ component_type)
 
-let rec render_template (template: template) (registry: component_registry) : element = 
+let submittable_to_props (submittable: submittable) on_submit = {
+  kind = submittable.kind;
+  id = submittable.id;
+  value = submittable.value;
+  on_submit;
+}
+
+let rec render_template_with_submit
+  (template: template)
+  (registry: component_registry)
+  (on_submit: SubmitTypes.submission_payload -> unit)
+  : element =
   match template with 
     | Container container -> 
-        let children = List.map (fun sub_template -> render_template sub_template registry) container.children in
+        let children = List.map (fun sub_template -> render_template_with_submit sub_template registry on_submit) container.children in
         React.createElementVariadic registry.container container (Array.of_list children)
 
     | Input input ->  
@@ -40,7 +58,7 @@ let rec render_template (template: template) (registry: component_registry) : el
 
     | Submittable submittable ->  
       (match registry.submittable with
-      | Some c ->  render c submittable
+      | Some c ->  render c (submittable_to_props submittable on_submit)
       | None -> (render registry.broken (broken_message "submittable")))
 
     | Image image ->  
@@ -58,6 +76,9 @@ let rec render_template (template: template) (registry: component_registry) : el
       match broken with
       | Soft message ->  render c message 
       | Hard message -> render c message
+
+let render_template (template: template) (registry: component_registry) : element =
+  render_template_with_submit template registry (fun _ -> ())
 
 type dom_handle =
   | Element of Dom.element 

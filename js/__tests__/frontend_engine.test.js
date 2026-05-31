@@ -1,6 +1,9 @@
 import React from "react";
-import { describe, expect, it } from "vitest";
-import { render_template } from "./output/engine/EngineFrontendReact.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  render_template,
+  render_template_with_submit,
+} from "./output/engine/EngineFrontendReact.js";
 
 const list = (items) =>
   items.reduceRight((tl, hd) => ({ hd, tl }), 0);
@@ -34,8 +37,24 @@ const containerTemplate = (children, id = "container") => ({
   },
 });
 
+const input = (id, value = "") => ({
+  kind: "input",
+  id,
+  value: { TAG: 1, _0: value },
+});
+
+const submittableTemplate = (id = "form") => ({
+  TAG: 1,
+  _0: {
+    kind: "submittable",
+    id,
+    value: list([input("name")]),
+  },
+});
+
 const Text = ({ content }) => React.createElement("p", null, content);
 const Image = ({ src, alt }) => React.createElement("img", { src, alt });
+const Submittable = ({ id }) => React.createElement("form", { id });
 const Container = ({ children }) => React.createElement("section", null, children);
 const Broken = (props) =>
   React.createElement("span", null, Object.values(props).join(""));
@@ -79,5 +98,39 @@ describe("FrontendEngine", () => {
     expect(children[0].props.content).toBe("One");
     expect(children[1].type).toBe(Text);
     expect(children[1].props.content).toBe("Two");
+  });
+
+  it("passes flat submittable props with a noop submit callback", () => {
+    const element = render(submittableTemplate(), { submittable: Submittable });
+
+    expect(element.type).toBe(Submittable);
+    expect(element.props.kind).toBe("submittable");
+    expect(element.props.id).toBe("form");
+    expect(element.props.value).toBeDefined();
+    expect(element.props.template).toBeUndefined();
+    expect(element.props.on_submit).toEqual(expect.any(Function));
+  });
+
+  it("threads submittable on_submit to the provided callback", () => {
+    const onSubmit = vi.fn();
+    const element = render_template_with_submit(
+      submittableTemplate(),
+      registry({ submittable: Submittable }),
+      onSubmit,
+    );
+    const payload = {
+      template_id: "form",
+      values: list([
+        {
+          id: "name",
+          value: { TAG: 1, _0: "Ada" },
+        },
+      ]),
+    };
+
+    element.props.on_submit(payload);
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit).toHaveBeenCalledWith(payload);
   });
 });
