@@ -47,13 +47,13 @@ and on_delta t delta =
   | Ok state ->
     t.state <- state;
     (match EngineBackend.handle_chunk delta t.processor with
-    | EngineBackend.Frontend.Pending processor ->
+    | EngineBackend.Telomere_result.Pending processor ->
       t.processor <- processor
-    | EngineBackend.Frontend.Parsed (template, processor) ->
+    | EngineBackend.Telomere_result.Parsed (template, processor) ->
       t.processor <- processor;
       t.last_template <- Some template;
       render_template t template
-    | EngineBackend.Frontend.Failed (message, processor) ->
+    | EngineBackend.Telomere_result.Failed (message, processor) ->
       t.processor <- processor;
       set_error t message)
 
