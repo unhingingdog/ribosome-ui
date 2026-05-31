@@ -44,14 +44,15 @@ let request_config ?(headers=[||]) body =
     ()
 
 let post ~url ~headers ~body ~on_chunk ~on_done ~on_error =
-  Fetch.fetchWithInit url (request_config ~headers body)
-  |> Js.Promise.then_ require_ok
-  |> Js.Promise.then_ require_body
-  |> Js.Promise.then_ (fun body ->
-    body
-    |> get_reader
-    |> Stream.pump ~on_chunk ~on_done:(fun () -> notify_complete ~on_done))
-  |> Js.Promise.catch (fun exn ->
-    let message = promise_error_to_string exn in
-    notify_failed ~on_done ~on_error message;
-    Js.Promise.resolve ())
+  ignore (
+    Fetch.fetchWithInit url (request_config ~headers body)
+    |> Js.Promise.then_ require_ok
+    |> Js.Promise.then_ require_body
+    |> Js.Promise.then_ (fun body ->
+      body
+      |> get_reader
+      |> Stream.pump ~on_chunk ~on_done:(fun () -> notify_complete ~on_done))
+    |> Js.Promise.catch (fun exn ->
+      let message = promise_error_to_string exn in
+      notify_failed ~on_done ~on_error message;
+      Js.Promise.resolve ()))

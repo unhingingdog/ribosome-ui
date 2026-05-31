@@ -19,3 +19,27 @@ let create config = {
   last_template = None;
   last_error = None;
 }
+
+let set_error t details =
+  t.last_error <- Some details;
+  t.state <- State.fail t.state details;
+  t.config.callbacks.on_error details
+
+let reset_turn t =
+  t.processor <- EngineBackend.initial_processor_state;
+  t.last_template <- None;
+  t.last_error <- None
+
+let kick_off t =
+  let prompt =
+    Prompt.create_llm_prompt
+      t.config.templates
+      t.config.goal_prompt
+      None
+  in
+  match State.kick_off t.state ~prompt with
+  | Error message ->
+    set_error t message
+  | Ok state ->
+    t.state <- state;
+    reset_turn t

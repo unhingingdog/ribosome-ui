@@ -3,6 +3,8 @@ import { post } from "../output/engine/Http.js";
 
 const encode = (value) => new TextEncoder().encode(value);
 
+const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 const reader = (reads) => {
   let index = 0;
   return {
@@ -36,7 +38,8 @@ describe("Http.post", () => {
       ),
     );
 
-    await post("/stream", [], "{}", onChunk, onDone, onError);
+    post("/stream", [], "{}", onChunk, onDone, onError);
+    await flushAsync();
 
     expect(onChunk).toHaveBeenCalledWith("hello");
     expect(onDone).toHaveBeenCalledWith(0);
@@ -52,7 +55,8 @@ describe("Http.post", () => {
       vi.fn(() => Promise.reject(new Error("network failed"))),
     );
 
-    await post("/stream", [], "{}", vi.fn(), onDone, onError);
+    post("/stream", [], "{}", vi.fn(), onDone, onError);
+    await flushAsync();
 
     expect(onDone).toHaveBeenCalledWith({ TAG: 0, _0: "network failed" });
     expect(onError).toHaveBeenCalledWith("network failed");
