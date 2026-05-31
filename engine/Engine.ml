@@ -30,17 +30,17 @@ let reset_turn t =
   t.last_template <- None;
   t.last_error <- None
 
-let render_template t template =
+let rec render_template t template =
   match t.renderer with
   | None -> ()
   | Some render ->
     EngineFrontendReact.render_template_with_submit
       template
       t.config.components
-      (fun _payload -> ())
+      (fun payload -> submit t payload)
     |> render
 
-let on_delta t delta =
+and on_delta t delta =
   match State.receive_chunk t.state ~chunk:delta with
   | Error message ->
     set_error t message
@@ -57,7 +57,7 @@ let on_delta t delta =
       t.processor <- processor;
       set_error t message)
 
-let on_chunk t payload =
+and on_chunk t payload =
   match t.config.stream_adapter payload with
   | Error message ->
     set_error t message
@@ -66,9 +66,25 @@ let on_chunk t payload =
     if delta <> "" then
       on_delta t delta
 
-let on_done _t _reason = ()
+and on_done t = function
+  | Http.Failed _ -> ()
+  | Http.Complete ->
+    (match t.last_error with
+    | Some _ -> ()
+    | None ->
+      match State.complete t.state with
+      | Error message ->
+        set_error t message
+      | Ok state ->
+        t.state <- state;
+        (match t.last_template with
+        | None -> ()
+        | Some _ ->
+          (* TODO: Consider processing or compacting assistant history for prompt quality. *)
+          t.history <- t.history @ [{ role = Bot; content = t.processor.buffer }]);
+        t.config.callbacks.on_message_complete t.last_template)
 
-let run_turn t ~user_message ~interaction_goal =
+and run_turn t ~user_message ~interaction_goal =
   reset_turn t;
   t.history <- t.history @ [{ role = User; content = user_message }];
   let context = {
@@ -88,7 +104,7 @@ let run_turn t ~user_message ~interaction_goal =
     ~on_done:(on_done t)
     ~on_error:(set_error t)
 
-let kick_off t =
+and kick_off t =
   let prompt =
     Prompt.create_llm_prompt
       t.config.templates
@@ -101,3 +117,26 @@ let kick_off t =
   | Ok state ->
     t.state <- state;
     run_turn t ~user_message:t.config.goal_prompt ~interaction_goal:None
+
+and submit t payload =
+  t.config.callbacks.on_submit payload;
+  let interaction_goal =
+    payload
+    |> SubmitTypes.submission_payload_to_json
+    |> Melange_json.to_string
+  in
+  let prompt =
+    Prompt.create_llm_prompt
+      t.config.templates
+      t.config.goal_prompt
+      (Some interaction_goal)
+  in
+  match State.kick_off t.state ~prompt with
+  | Error message ->
+    set_error t message
+  | Ok state ->
+    t.state <- state;
+    run_turn
+      t
+      ~user_message:interaction_goal
+      ~interaction_goal:(Some interaction_goal)
