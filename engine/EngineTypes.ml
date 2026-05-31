@@ -37,8 +37,6 @@ type config = {
 }
 
 type handle = {
-  start: string -> unit Js.Promise.t;
-  submit: SubmitTypes.submission_payload -> unit Js.Promise.t;
   reset: unit -> unit;
   history: unit -> chat_message list;
 }

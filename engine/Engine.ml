@@ -10,7 +10,7 @@ type t = {
   mutable last_error: string option;
 }
 
-let create config = {
+let create_runtime config = {
   config;
   renderer = EngineFrontendReact.create_renderer config.root;
   state = State.AnyState State.Idle;
@@ -140,3 +140,16 @@ and submit t payload =
       t
       ~user_message:interaction_goal
       ~interaction_goal:(Some interaction_goal)
+
+let reset t =
+  t.state <- State.AnyState State.Idle;
+  t.history <- [];
+  reset_turn t
+
+let create config =
+  let t = create_runtime config in
+  kick_off t;
+  {
+    reset = (fun () -> reset t);
+    history = (fun () -> t.history);
+  }

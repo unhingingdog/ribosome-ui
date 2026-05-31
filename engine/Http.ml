@@ -7,9 +7,12 @@ type completion_reason =
 
 let reject message = Js.Promise.reject (Failure message)
 
+(* TODO: this is ugly. Consider refactor. *)
 let promise_error_to_string : Js.Promise.error -> string = [%mel.raw {|
   (err) => {
     if (err == null) return String(err);
+    if (typeof err._1 === "string") return err._1;
+    if (err.cause != null && typeof err.cause._1 === "string") return err.cause._1;
     if (typeof err.message === "string") return err.message;
     return String(err);
   }
