@@ -3,6 +3,7 @@ _build/
 _opam/
 js/output/
 js/dist/
+js/demo/dist/
 
 # Node
 js/node_modules/
