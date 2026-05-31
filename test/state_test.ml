@@ -105,6 +105,46 @@ let test_transition_errored_restart () =
   | State.RetrySend _ | State.RetryRecv _ ->
     failwith "expected Restarted"
 
+let test_state_of_idle_result () =
+  let result = State.transition_idle (State.Idle history) (State.Send send_payload) in
+  match State.state_of_idle_result result with
+  | State.AnyState (State.Sending (next_history, next_payload)) ->
+    assert_equal "idle adapter preserves history" history next_history;
+    assert_equal "idle adapter stores send payload" send_payload next_payload
+  | State.AnyState _ ->
+    failwith "expected Sending state"
+
+let test_state_of_sending_result () =
+  let result =
+    State.transition_sending
+      (State.Sending (history, send_payload))
+      (State.StartRecv recv_payload)
+  in
+  match State.state_of_sending_result result with
+  | State.AnyState (State.Receiving (next_history, next_payload)) ->
+    assert_equal "sending adapter preserves history" history next_history;
+    assert_equal "sending adapter stores recv payload" recv_payload next_payload
+  | State.AnyState _ ->
+    failwith "expected Receiving state"
+
+let test_state_of_receiving_result () =
+  let result = State.transition_receiving (State.Receiving (history, recv_payload)) State.Complete in
+  match State.state_of_receiving_result result with
+  | State.AnyState (State.Idle next_history) ->
+    assert_equal "receiving adapter returns idle" history next_history
+  | State.AnyState _ ->
+    failwith "expected Idle state"
+
+let test_state_of_recover_result () =
+  let state = State.Err (history, { State.details = "failed" }, State.FailedSend send_payload) in
+  let result = State.transition_errored state State.Retry in
+  match State.state_of_recover_result result with
+  | State.AnyState (State.Sending (next_history, next_payload)) ->
+    assert_equal "recover adapter preserves history" history next_history;
+    assert_equal "recover adapter restores send payload" send_payload next_payload
+  | State.AnyState _ ->
+    failwith "expected Sending state"
+
 let () =
   test_transition_idle ();
   test_transition_sending_start_recv ();
@@ -114,4 +154,8 @@ let () =
   test_transition_receiving_error ();
   test_transition_errored_retry_send ();
   test_transition_errored_retry_recv ();
-  test_transition_errored_restart ()
+  test_transition_errored_restart ();
+  test_state_of_idle_result ();
+  test_state_of_sending_result ();
+  test_state_of_receiving_result ();
+  test_state_of_recover_result ()

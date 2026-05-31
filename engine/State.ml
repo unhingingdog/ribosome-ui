@@ -43,6 +43,7 @@ type recover_action =
   | Retry
   | Restart
 
+(* every transition returns a result *)
 
 type idle_result =
   | StartSending of sending state
@@ -61,6 +62,7 @@ type recover_result =
   | RetryRecv of receiving state
   | Restarted of idle state
 
+(* these are all legal transitions *)
 
 let transition_idle (state: idle state) (action: send_action) : idle_result =
   match state, action with 
@@ -90,3 +92,24 @@ let transition_errored (state: errored state) (action: recover_action): recover_
       RetrySend (Sending (history, payload))
     | Err (history, _, FailedRecv payload), Retry ->
       RetryRecv (Receiving (history, payload))
+
+(* These are adapters that get us state -> state. We have to widen the types outside the state machine. *)
+
+type any_state = AnyState : 'phase state -> any_state
+
+let state_of_idle_result = function
+  | StartSending state -> AnyState state
+
+let state_of_sending_result = function
+  | StartReceiving state -> AnyState state
+  | SendErr state -> AnyState state
+
+let state_of_receiving_result = function
+  | ContinueReceiving state -> AnyState state
+  | Done state -> AnyState state
+  | RecvErr state -> AnyState state
+
+let state_of_recover_result = function
+  | RetrySend state -> AnyState state
+  | RetryRecv state -> AnyState state
+  | Restarted state -> AnyState state
