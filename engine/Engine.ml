@@ -30,6 +30,30 @@ let reset_turn t =
   t.last_template <- None;
   t.last_error <- None
 
+let on_chunk _t _payload = ()
+
+let on_done _t _reason = ()
+
+let run_turn t ~user_message ~interaction_goal =
+  reset_turn t;
+  t.history <- t.history @ [{ role = User; content = user_message }];
+  let context = {
+    system_prompt =
+      Prompt.create_llm_prompt
+        t.config.templates
+        t.config.goal_prompt
+        interaction_goal;
+    messages = t.history;
+  } in
+  let request = t.config.request context in
+  Http.post
+    ~url:request.url
+    ~headers:request.headers
+    ~body:request.body
+    ~on_chunk:(on_chunk t)
+    ~on_done:(on_done t)
+    ~on_error:(set_error t)
+
 let kick_off t =
   let prompt =
     Prompt.create_llm_prompt
@@ -42,4 +66,4 @@ let kick_off t =
     set_error t message
   | Ok state ->
     t.state <- state;
-    reset_turn t
+    run_turn t ~user_message:t.config.goal_prompt ~interaction_goal:None
