@@ -22,6 +22,7 @@ let create_runtime config = {
 
 let set_error t details =
   t.last_error <- Some details;
+  (* TODO: Wire engine retry behavior into the existing State.retry mechanism. *)
   t.state <- State.fail t.state details;
   t.config.callbacks.on_error details
 
