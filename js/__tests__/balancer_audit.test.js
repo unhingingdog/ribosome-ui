@@ -37,8 +37,8 @@ describe("Balancer — Brace states", () => {
   it("Brace ExpectingValue: after colon → NotClosable", () =>
     expect(isNotClosable(process_delta(create(), '{"a":'))).toBe(true));
 
-  it("Brace InValue String Open: mid-string value → NotClosable", () =>
-    expect(isNotClosable(process_delta(create(), '{"a":"hel'))).toBe(true));
+  it("Brace InValue String Open: mid-string value → closable", () =>
+    expect(completion(process_delta(create(), '{"a":"hel'))).toBe('"}'));
 
   it("Brace InValue String Escaped: backslash in value → NotClosable", () =>
     expect(isNotClosable(process_delta(create(), '{"a":"hel\\'))).toBe(true));
@@ -90,8 +90,8 @@ describe("Balancer — Bracket states", () => {
   it("Bracket ExpectingValue: dangling comma → NotClosable", () =>
     expect(isNotClosable(process_delta(create(), "[1,"))).toBe(true));
 
-  it("Bracket InValue String Open: mid-string → NotClosable", () =>
-    expect(isNotClosable(process_delta(create(), '["hel'))).toBe(true));
+  it("Bracket InValue String Open: mid-string → closable", () =>
+    expect(completion(process_delta(create(), '["hel'))).toBe('"]'));
 
   it("Bracket InValue String Escaped: backslash in string → NotClosable", () =>
     expect(isNotClosable(process_delta(create(), '["hel\\'))).toBe(true));
@@ -128,8 +128,8 @@ describe("Balancer — closing stack depth", () => {
   it("stack with open key: mid-key inside nested obj → NotClosable", () =>
     expect(isNotClosable(process_delta(create(), '{"a":{"ke'))).toBe(true));
 
-  it("stack with open string value: mid-string inside nested obj → NotClosable", () =>
-    expect(isNotClosable(process_delta(create(), '{"a":{"b":"hel'))).toBe(true));
+  it("stack with open string value: mid-string inside nested obj → closable", () =>
+    expect(completion(process_delta(create(), '{"a":{"b":"hel'))).toBe('"}}'));
 });
 
 describe("Balancer — already complete", () => {

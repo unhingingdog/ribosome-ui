@@ -21,6 +21,7 @@ let create_runtime config = {
 }
 
 let set_error t details =
+  Utils.Log.debug "[ribosome engine] set_error" details;
   t.last_error <- Some details;
   (* TODO: Wire engine retry behavior into the existing State.retry mechanism. *)
   t.state <- State.fail t.state details;
@@ -32,6 +33,7 @@ let reset_turn t =
   t.last_error <- None
 
 let rec render_template t template =
+  Utils.Log.debug1 "[ribosome engine] render_template";
   match t.renderer with
   | None -> ()
   | Some render ->
@@ -42,6 +44,7 @@ let rec render_template t template =
     |> render
 
 and on_delta t delta =
+  Utils.Log.debug "[ribosome engine] on_delta" delta;
   match State.receive_chunk t.state ~chunk:delta with
   | Error message ->
     set_error t message
@@ -49,27 +52,34 @@ and on_delta t delta =
     t.state <- state;
     (match EngineBackend.handle_chunk delta t.processor with
     | EngineBackend.Telomere_result.Pending processor ->
+      Utils.Log.debug1 "[ribosome engine] backend pending";
       t.processor <- processor
     | EngineBackend.Telomere_result.Parsed (template, processor) ->
+      Utils.Log.debug1 "[ribosome engine] backend parsed, rendering";
       t.processor <- processor;
       t.last_template <- Some template;
       render_template t template
     | EngineBackend.Telomere_result.Failed (message, processor) ->
+      Utils.Log.debug "[ribosome engine] backend failed" message;
       t.processor <- processor;
       set_error t message)
 
 and on_chunk t payload =
+  Utils.Log.debug "[ribosome engine] raw stream payload" payload;
   match t.config.stream_adapter payload with
   | Error message ->
     set_error t message
   | Ok None -> ()
   | Ok (Some delta) ->
-    if delta <> "" then
+    if delta <> "" then begin
+      Utils.Log.debug "[ribosome engine] extracted delta" delta;
       on_delta t delta
+    end
 
 and on_done t = function
   | Http.Failed _ -> ()
   | Http.Complete ->
+    Utils.Log.debug1 "[ribosome engine] stream complete";
     (match t.last_error with
     | Some _ -> ()
     | None ->
@@ -87,6 +97,7 @@ and on_done t = function
 
 and run_turn t ~user_message ~interaction_goal =
   reset_turn t;
+  Utils.Log.debug "[ribosome engine] run_turn user_message" user_message;
   t.history <- t.history @ [{ role = User; content = user_message }];
   let context = {
     system_prompt =
@@ -97,6 +108,8 @@ and run_turn t ~user_message ~interaction_goal =
     messages = t.history;
   } in
   let request = t.config.request context in
+  Utils.Log.debug "[ribosome engine] request url" request.url;
+  Utils.Log.debug "[ribosome engine] request body" request.body;
   Http.post
     ~url:request.url
     ~headers:request.headers
@@ -106,6 +119,7 @@ and run_turn t ~user_message ~interaction_goal =
     ~on_error:(set_error t)
 
 and kick_off t =
+  Utils.Log.debug1 "[ribosome engine] kick_off";
   let prompt =
     Prompt.create_llm_prompt
       t.config.templates
@@ -120,6 +134,7 @@ and kick_off t =
     run_turn t ~user_message:t.config.goal_prompt ~interaction_goal:None
 
 and submit t payload =
+  Utils.Log.debug1 "[ribosome engine] submit";
   t.config.callbacks.on_submit payload;
   let interaction_goal =
     payload

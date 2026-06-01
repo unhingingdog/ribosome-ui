@@ -2,18 +2,15 @@ import { describe, it, expect } from "vitest";
 import { create_processor, feed } from "./output/telomere/Processor.js";
 
 describe("Processor — incremental streaming", () => {
-  it("emits Pending mid-token, then Completion once closable", () => {
+  it("emits completion once an open string value can be capped", () => {
     let ps = create_processor();
 
     let [out, ps1] = feed(ps, '{"key":');
     expect(out).toBe(0); // Pending
 
-    let [out2, ps2] = feed(ps1, '"val');
-    expect(out2).toBe(0); // Pending
-
-    let [out3] = feed(ps2, '"');
-    expect(out3.TAG).toBe(0); // Completion
-    expect(out3._0).toBe("}"); // close object
+    let [out2] = feed(ps1, '"val');
+    expect(out2.TAG).toBe(0); // Completion
+    expect(out2._0).toBe('"}'); // close string and object
   });
 
   it("completion shrinks as more structure arrives", () => {

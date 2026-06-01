@@ -8,8 +8,10 @@ export default {
   input: resolve(__dirname, "src/index.js"),
   output: {
     dir: "dist",
-    entryFileNames: "index.js",
+    entryFileNames: "[name].js",
     format: "esm",
+    preserveModules: true,
+    preserveModulesRoot: "src",
   },
   resolve: {
     alias: {
@@ -23,5 +25,5 @@ export default {
       ),
     },
   },
-  external: ["react", "react-dom"],
+  external: ["react", "react-dom", "react-dom/client"],
 };

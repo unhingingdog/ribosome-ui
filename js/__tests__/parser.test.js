@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parse_data } from "./dist/engine/Parser.js";
+import { parse_data } from "../output/engine/Parser.js";
 
 // Handle ugly translation from ocaml ADTs
 const unwrap = (result) => {
@@ -36,6 +36,31 @@ const nonContainerWithChildren = {
   children: [exampleTemplate],
 };
 
+const exampleText = {
+  kind: "text",
+  id: "greetingText",
+  text_type: "H1",
+  value: "Welcome! Please enter your name:",
+};
+
+const exampleSubmittable = {
+  kind: "submittable",
+  id: "nameInputForm",
+  value: [
+    {
+      kind: "input",
+      id: "nameInput",
+      value: "",
+    },
+  ],
+};
+
+const exampleGeneratedContainer = {
+  kind: "container",
+  id: "greetingContainer",
+  children: [exampleText, exampleSubmittable],
+};
+
 describe("Parser", () => {
   it("parses a valid image", () => {
     const result = unwrap(parse_data(JSON.stringify(exampleTemplate)));
@@ -67,6 +92,25 @@ describe("Parser", () => {
 
   it("parses a container with valid children", () => {
     const result = unwrap(parse_data(JSON.stringify(exampleContainer)));
+    expect(result).toBeDefined();
+  });
+
+  it("parses generated text and submittable public JSON", () => {
+    const result = unwrap(parse_data(JSON.stringify(exampleGeneratedContainer)));
+
+    expect(result).toBeDefined();
+  });
+
+  it("still parses legacy tagged variant JSON", () => {
+    const result = unwrap(parse_data(JSON.stringify({
+      kind: "container",
+      id: "legacyContainer",
+      children: [
+        { kind: "text", id: "legacyText", text_type: ["H1"], content: "Hello" },
+        { kind: "input", id: "legacyInput", value: ["String", "Ada"] },
+      ],
+    })));
+
     expect(result).toBeDefined();
   });
 

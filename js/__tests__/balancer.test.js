@@ -80,10 +80,9 @@ describe("Balancer — partial input completions", () => {
     expect(ok(result)?.[0]).toBe("]}]}");
   });
 
-  it("open string value is not yet closable (NotClosable)", () => {
-    // "val" is still open — can't close without the closing quote first
+  it("completes an open string value", () => {
     const result = feed('{"key":"val');
-    expect(err(result)?.[0]).toBe(0); // NotClosable
+    expect(ok(result)?.[0]).toBe('"}');
   });
 
   it("partial boolean 'tru' is not yet closable (NonCompletable)", () => {
@@ -126,11 +125,7 @@ describe("Balancer — streaming (multiple process_delta calls)", () => {
     // s1 is NotClosable (after colon, expecting value) — state is still valid
     const state1 = err(s1)[1];
     const s2 = process_delta(state1, '"val');
-    // open string inside object — also NotClosable
-    const state2 = err(s2)[1];
-    const s3 = process_delta(state2, '"');
-    // string now closed, object still open — closable as '}'
-    expect(ok(s3)?.[0]).toBe("}");
+    expect(ok(s2)?.[0]).toBe('"}');
   });
 
   it("streams the full template JSON and completes to empty string", () => {

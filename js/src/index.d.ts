@@ -20,17 +20,26 @@ export type RibosomeHeaders =
   | Array<[string, string]>
   | Headers;
 
+export type RibosomeInputValue = string | number;
+
+export type RibosomeTextType = "Paragraph" | "H1" | "H2" | "H3" | "H4" | "H5" | "H6";
+
 export type RibosomeInputProps = {
+  kind: "input";
   id: string;
-  value: unknown;
+  value: RibosomeInputValue;
 };
 
 export type RibosomeTextProps = {
-  text_type: unknown;
-  content: string;
+  kind: "text";
+  id: string;
+  text_type: RibosomeTextType;
+  value: string;
 };
 
 export type RibosomeImageProps = {
+  kind: "image";
+  id: string;
   src: string;
   alt?: string;
 };
@@ -42,9 +51,17 @@ export type RibosomeContainerProps = {
 
 export type RibosomeSubmittableProps = {
   id: string;
-  kind: string;
-  value: unknown;
-  on_submit: (payload: unknown) => void;
+  kind: "submittable";
+  value: RibosomeInputProps[];
+  on_submit: (payload: RibosomeSubmissionPayload) => void;
+};
+
+export type RibosomeSubmissionPayload = {
+  templateId: string;
+  values: Array<{
+    id: string;
+    value: RibosomeInputValue;
+  }>;
 };
 
 export type RibosomeComponents = {

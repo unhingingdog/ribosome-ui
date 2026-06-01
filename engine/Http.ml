@@ -1,3 +1,5 @@
+open Utils.Log
+
 external get_body : Fetch.Response.t -> 'body Js.Nullable.t = "body" [@@mel.get]
 external get_reader : 'body -> 'reader = "getReader" [@@mel.send]
 
@@ -47,6 +49,8 @@ let request_config ?(headers=[||]) body =
     ()
 
 let post ~url ~headers ~body ~on_chunk ~on_done ~on_error =
+  debug "[ribosome http] POST" url;
+  debug "[ribosome http] request body" body;
   ignore (
     Fetch.fetchWithInit url (request_config ~headers body)
     |> Js.Promise.then_ require_ok
@@ -57,5 +61,6 @@ let post ~url ~headers ~body ~on_chunk ~on_done ~on_error =
       |> Stream.pump ~on_chunk ~on_done:(fun () -> notify_complete ~on_done))
     |> Js.Promise.catch (fun exn ->
       let message = promise_error_to_string exn in
+      debug "[ribosome http] request failed" message;
       notify_failed ~on_done ~on_error message;
       Js.Promise.resolve ()))

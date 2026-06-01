@@ -56,8 +56,14 @@ const Text = ({ content }) => React.createElement("p", null, content);
 const Image = ({ src, alt }) => React.createElement("img", { src, alt });
 const Submittable = ({ id }) => React.createElement("form", { id });
 const Container = ({ children }) => React.createElement("section", null, children);
-const Broken = (props) =>
-  React.createElement("span", null, Object.values(props).join(""));
+const Broken = (props) => {
+  const message =
+    typeof props === "string"
+      ? props
+      : Object.values(props ?? {}).join("");
+
+  return React.createElement("span", null, message);
+};
 
 const registry = (components = {}) => ({
   input: undefined,

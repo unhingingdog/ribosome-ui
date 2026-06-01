@@ -84,10 +84,12 @@ let is_cleanly_closable = function
   | Pending -> true
   | Brace Empty -> true
   | Brace (InValue (NonString (Completable _))) -> true
+  | Brace (InValue (String Open)) -> true
   | Brace (InValue (String Closed)) -> true
   | Brace (InValue NestedValueComplete) -> true
   | Bracket Empty -> true
   | Bracket (InValue (NonString (Completable _))) -> true
+  | Bracket (InValue (String Open)) -> true
   | Bracket (InValue (String Closed)) -> true
   | Bracket (InValue NestedValueComplete) -> true
   | _ -> false

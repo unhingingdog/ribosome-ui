@@ -1,3 +1,5 @@
+open Utils.Log
+
 let string_field name obj =
   match Js.Dict.get obj name with
   | None -> None
@@ -34,14 +36,19 @@ let text_delta payload =
   try
     if String.equal payload "[DONE]" then
       Ok None
-    else
+    else begin
+      debug "[ribosome openai] payload" payload;
       match payload |> Melange_json.of_string |> Js.Json.decodeObject with
       | None -> Error "OpenAI stream payload was not a JSON object"
       | Some obj ->
-        Ok
-          (match chat_completion_delta obj with
-           | Some delta -> Some delta
-           | None -> response_delta obj)
+        let delta =
+          match chat_completion_delta obj with
+          | Some delta -> Some delta
+          | None -> response_delta obj
+        in
+        debug "[ribosome openai] extracted text delta" delta;
+        Ok delta
+    end
   with err ->
     Error (Printexc.to_string err)
 

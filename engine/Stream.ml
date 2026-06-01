@@ -1,3 +1,5 @@
+open Utils.Log
+
 external read : 'reader -> < done_ : bool [@mel.as "done"]; value : 'value > Js.t Js.Promise.t = "read" [@@mel.send]
 external make_decoder : unit -> 'decoder = "TextDecoder" [@@mel.new]
 external decode : 'decoder -> 'value -> string = "decode" [@@mel.send]
@@ -54,7 +56,8 @@ let parse_complete_lines lines =
 let parse_sse_chunk state raw =
   if state.done_ then
     ([], state)
-  else
+  else begin
+    debug "[ribosome stream] raw chunk" raw;
     let combined = state.pending_line ^ raw in
     let lines = String.split_on_char '\n' combined in
     let complete_lines, pending_line =
@@ -63,11 +66,13 @@ let parse_sse_chunk state raw =
       | last :: complete_reversed -> (List.rev complete_reversed, last)
     in
     let events, done_ = parse_complete_lines complete_lines in
+    debug "[ribosome stream] parsed SSE events" (List.length events);
     let next_state = {
       pending_line = if done_ then "" else pending_line;
       done_;
     } in
     (events, next_state)
+  end
 
 let pump ~on_chunk ~on_done reader =
   let decoder = make_decoder () in

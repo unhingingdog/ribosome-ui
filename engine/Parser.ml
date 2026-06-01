@@ -10,6 +10,7 @@ let catch throwable =
 let parse_template json =
   let open Melange_json.Of_json in
   try 
+  debug "[ribosome parsing] parse_template kind" (field "kind" string json);
   match field "kind" string json with
   | "image" -> catch (fun () -> Image (image_of_json json))
   | "text" -> catch (fun () -> Text (text_of_json json))
@@ -25,6 +26,7 @@ let parse_template json =
 
 let serialise_json data = 
   try 
+    debug "[ribosome parsing] JSON candidate" data;
     Ok (Melange_json.of_string data)
   with err -> 
     Js.Console.error2 "[ribosome parsing] Hard failure - Failed to parse invalid JSON: " data;
@@ -62,6 +64,7 @@ let extract_children json =
     | Some serialised_array -> 
       (match Js.Json.decodeArray serialised_array with
       | Some array -> 
+          debug "[ribosome parsing] children count" (Array.length array);
           (match validate_all_objects array with 
           | Ok array -> Has (Array.to_list array)
           | Error e -> Corrupt e)
@@ -71,9 +74,14 @@ let extract_children json =
 
 let rec expand_template json = 
   match extract_children json with 
-  | Absent -> parse_template json
-  | Corrupt e -> Broken (Hard e)
+  | Absent ->
+    debug1 "[ribosome parsing] leaf template";
+    parse_template json
+  | Corrupt e ->
+    debug "[ribosome parsing] corrupt children" e;
+    Broken (Hard e)
   | Has children -> 
+    debug "[ribosome parsing] expanding children" (List.length children);
     let decoded_children = List.map expand_template children in
     match parse_template json with
     | Container container -> 
