@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 
+import "./index.css";
 import { App } from "./App";
 
 // Verbose debug logging for the demo: lights up both the JS adapter `debug()`

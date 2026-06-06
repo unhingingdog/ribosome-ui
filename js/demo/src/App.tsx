@@ -1,21 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import createEngine, {
-  type RibosomeConfig,
   type RibosomeAdapterConfig,
   type RibosomeAsset,
-  type RibosomeBadgeProps,
-  type RibosomeButtonProps,
-  type RibosomeContainerProps,
-  type RibosomeDividerProps,
-  type RibosomeImageProps,
-  type RibosomeInputProps,
-  type RibosomeListProps,
-  type RibosomeSelectProps,
-  type RibosomeStatProps,
-  type RibosomeSubmittableProps,
-  type RibosomeTextProps,
 } from "../../dist/index.js";
+
+import { components } from "./components";
 
 const storageKey = "ribosome-ui:demo";
 
@@ -103,144 +93,6 @@ const clearSettings = () => {
 const Panel = ({ children }: { children: React.ReactNode }) => (
   <section style={{ padding: 12, border: "1px solid #ddd" }}>{children}</section>
 );
-
-const Container = ({ id, children }: RibosomeContainerProps) => (
-  <div id={id} data-kind="container">
-    {children}
-  </div>
-);
-
-const Broken = (props: unknown) => {
-  const message =
-    typeof props === "string"
-      ? props
-      : Object.values((props as Record<string, unknown>) ?? {}).join("");
-
-  return <pre data-kind="broken">{message}</pre>;
-};
-
-const Input = ({ id, value }: RibosomeInputProps) => (
-  <input id={id} name={id} defaultValue={String(value ?? "")} />
-);
-
-const Submittable = ({ id, value, on_submit }: RibosomeSubmittableProps) => (
-  <form
-    id={id}
-    onSubmit={(event) => {
-      event.preventDefault();
-      const formData = new FormData(event.currentTarget);
-
-      console.log("[ribosome submit] form fields", value);
-      console.log("[ribosome submit] raw FormData", [...formData.entries()]);
-
-      const payload = {
-        templateId: id,
-        values: value.map((field) => ({
-          id: field.id,
-          value:
-            formData.get(field.id) ??
-            (field.kind === "select" ? field.selected ?? "" : field.value),
-        })),
-      };
-
-      console.log("[ribosome submit] payload -> on_submit", payload);
-      on_submit(payload);
-    }}
-  >
-    {value.map((field) =>
-      field.kind === "select" ? (
-        <Select key={field.id} {...field} />
-      ) : (
-        <div key={field.id}>
-          <label htmlFor={field.id}>{field.id}</label>
-          <Input {...field} />
-        </div>
-      ),
-    )}
-    <button type="submit">Submit</button>
-  </form>
-);
-
-const Image = ({ src, alt }: RibosomeImageProps) => <img src={src} alt={alt} />;
-
-const Button = ({ id, label, action, disabled }: RibosomeButtonProps) => (
-  <button
-    id={id}
-    type={action === "Submit" ? "submit" : "button"}
-    disabled={disabled}
-    onClick={() => {
-      if (typeof action === "string" && action.startsWith("Navigate:")) {
-        window.location.href = action.slice("Navigate:".length);
-      }
-    }}
-  >
-    {label}
-  </button>
-);
-
-const Select = ({ id, label, options, selected }: RibosomeSelectProps) => (
-  <label htmlFor={id}>
-    {label}
-    <select id={id} name={id} defaultValue={selected ?? ""}>
-      {!selected && <option value="">Select...</option>}
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  </label>
-);
-
-const Badge = ({ id, label, variant }: RibosomeBadgeProps) => (
-  <span id={id} data-variant={variant}>
-    {label}
-  </span>
-);
-
-const List = ({ id, ordered, children }: RibosomeListProps) => {
-  const Tag = ordered ? "ol" : "ul";
-
-  return <Tag id={id}>{children}</Tag>;
-};
-
-const Stat = ({ id, label, value, secondary }: RibosomeStatProps) => (
-  <dl id={id}>
-    <dt>{label}</dt>
-    <dd>{value}</dd>
-    {secondary && <dd>{secondary}</dd>}
-  </dl>
-);
-
-const Divider = ({ id, label }: RibosomeDividerProps) => (
-  <hr id={id} aria-label={label} />
-);
-
-const Text = ({ text_type, value }: RibosomeTextProps) => {
-  if (text_type === "H1") return <h1>{value}</h1>;
-  if (text_type === "H2") return <h2>{value}</h2>;
-  if (text_type === "H3") return <h3>{value}</h3>;
-  if (text_type === "H4") return <h4>{value}</h4>;
-  if (text_type === "H5") return <h5>{value}</h5>;
-  if (text_type === "H6") return <h6>{value}</h6>;
-
-  return <p>{value}</p>;
-};
-
-const components = {
-  container: Container,
-  broken: Broken,
-  input: Input,
-  submittable: Submittable,
-  image: Image,
-  text: Text,
-  button: Button,
-  select: Select,
-  badge: Badge,
-  list: List,
-  stat: Stat,
-  divider: Divider,
-} satisfies Required<RibosomeConfig["components"]>;
 
 const formFieldStyle = {
   display: "grid",

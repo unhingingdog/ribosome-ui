@@ -139,10 +139,14 @@ export type RibosomeSubmissionPayload = {
   }>;
 };
 
+export type RibosomeBrokenProps = {
+  message: string;
+};
+
 export type RibosomeComponents = {
   /** Components are the public template-selection surface; template instructions are built in. */
   container: React.ComponentType<RibosomeContainerProps>;
-  broken: React.ComponentType<string>;
+  broken: React.ComponentType<RibosomeBrokenProps>;
   input?: React.ComponentType<RibosomeInputProps>;
   submittable?: React.ComponentType<RibosomeSubmittableProps>;
   image?: React.ComponentType<RibosomeImageProps>;
