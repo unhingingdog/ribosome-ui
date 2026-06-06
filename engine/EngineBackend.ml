@@ -26,7 +26,9 @@ and template_health = function
   | Broken (Soft message) -> SoftBroken message
   | Container container ->
       children_health Healthy container.children
-  | Input _ | Submittable _ | Image _ | Text _ -> Healthy
+  | List list ->
+      children_health Healthy list.children
+  | Input _ | Submittable _ | Image _ | Text _ | Button _ | Select _ | Badge _ | Stat _ | Divider _ -> Healthy
 
 module Telomere_result = struct
   type t =

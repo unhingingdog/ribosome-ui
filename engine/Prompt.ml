@@ -21,6 +21,8 @@ let required_label required =
 let field_type_label = function
   | TemplateDefinitionTypes.StringField -> "string"
   | TemplateDefinitionTypes.NumberField -> "number"
+  | TemplateDefinitionTypes.BoolField -> "boolean"
+  | TemplateDefinitionTypes.ArrayField -> "array"
   | TemplateDefinitionTypes.TemplateList -> "template[]"
   | TemplateDefinitionTypes.InputList -> "input[]"
 
@@ -76,8 +78,9 @@ let hard_rules_section =
      \"hero-title\", \"flight-results-group\", \
      \"departure-date\").";
     "ALWAYS: Every response must contain at least one submittable \
-     component so the user can continue the interaction. A screen with \
-     no way for the user to respond is broken.";
+     component or one standalone button with action Submit so the user \
+     can continue the interaction. A screen with no way for the user to \
+     respond is broken.";
     "ALWAYS: Use the richest combination of available template types that \
      fits the content. Use containers for semantic groups, text for \
      labels and explanations, images for useful visuals, submittables for \

@@ -1,4 +1,4 @@
-type field_type = StringField | NumberField | TemplateList | InputList
+type field_type = StringField | NumberField | BoolField | ArrayField | TemplateList | InputList
 
 type field_def = {
   name: string;
@@ -21,9 +21,21 @@ let field name field_type instructions = {
   instructions;
 }
 
+let optional_field name field_type instructions = {
+  name;
+  field_type;
+  required = false;
+  instructions;
+}
+
 let string_field name instructions = field name StringField instructions
+let bool_field name instructions = field name BoolField instructions
+let array_field name instructions = field name ArrayField instructions
 let input_list_field name instructions = field name InputList instructions
 let template_list_field name instructions = field name TemplateList instructions
+
+let optional_string_field name instructions = optional_field name StringField instructions
+let optional_bool_field name instructions = optional_field name BoolField instructions
 
 let kind_field kind = string_field "kind" ("Always " ^ kind ^ ".")
 let id_field subject = string_field "id" ("Stable id for this " ^ subject ^ ".")

@@ -1,3 +1,5 @@
+(* TODO: revise low quality AI code *)
+
 type 'template t = {
   kind: string;
   id: string;
@@ -12,15 +14,28 @@ let of_json json =
     children = [];
   }
 
-let definition : TemplateDefinitionTypes.template_definition =
-  let open TemplateDefinitionTypes in
-  {
-    kind = "container";
-    intent = "Group one or more templates into a nested rendered section.";
-    instructions = "Use container for layout, grouping, and nesting other available templates.";
-    fields = [
-      kind_field "container";
-      id_field "container";
-      template_list_field "children" "Child templates to render inside this container.";
-    ];
-  }
+let definition : TemplateDefinitionTypes.template_definition = {
+  kind = "container";
+  intent = "Group one or more templates into a nested rendered section.";
+  instructions = "Use container for layout, grouping, and nesting other available templates.";
+  fields = [
+    {
+      name = "kind";
+      field_type = TemplateDefinitionTypes.StringField;
+      required = true;
+      instructions = "Always container.";
+    };
+    {
+      name = "id";
+      field_type = TemplateDefinitionTypes.StringField;
+      required = true;
+      instructions = "Stable id for this container.";
+    };
+    {
+      name = "children";
+      field_type = TemplateDefinitionTypes.TemplateList;
+      required = true;
+      instructions = "Child templates to render inside this container.";
+    };
+  ];
+}

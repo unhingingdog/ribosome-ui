@@ -30,6 +30,8 @@ export type RibosomeHeaders =
 export type RibosomeInputValue = string | number;
 
 export type RibosomeTextType = "Paragraph" | "H1" | "H2" | "H3" | "H4" | "H5" | "H6";
+export type RibosomeButtonAction = "Submit" | `Navigate:${string}` | string;
+export type RibosomeBadgeVariant = "Neutral" | "Success" | "Warning" | "Error" | "Info";
 
 export type RibosomeInputProps = {
   kind: "input";
@@ -58,6 +60,56 @@ export type RibosomeContainerProps = {
   [key: string]: unknown;
 };
 
+export type RibosomeButtonProps = {
+  kind: "button";
+  id: string;
+  label: string;
+  action: RibosomeButtonAction;
+  disabled?: boolean;
+};
+
+export type RibosomeSelectOption = {
+  value: string;
+  label: string;
+};
+
+export type RibosomeSelectProps = {
+  kind: "select";
+  id: string;
+  label: string;
+  options: RibosomeSelectOption[];
+  selected?: string;
+};
+
+export type RibosomeBadgeProps = {
+  kind: "badge";
+  id: string;
+  label: string;
+  variant: RibosomeBadgeVariant;
+};
+
+export type RibosomeListProps = {
+  kind: "list";
+  id: string;
+  ordered?: boolean;
+  children?: React.ReactNode;
+  [key: string]: unknown;
+};
+
+export type RibosomeStatProps = {
+  kind: "stat";
+  id: string;
+  label: string;
+  value: string;
+  secondary?: string;
+};
+
+export type RibosomeDividerProps = {
+  kind: "divider";
+  id: string;
+  label?: string;
+};
+
 export type RibosomeSubmittableProps = {
   id: string;
   kind: "submittable";
@@ -81,6 +133,12 @@ export type RibosomeComponents = {
   submittable?: React.ComponentType<RibosomeSubmittableProps>;
   image?: React.ComponentType<RibosomeImageProps>;
   text?: React.ComponentType<RibosomeTextProps>;
+  button?: React.ComponentType<RibosomeButtonProps>;
+  select?: React.ComponentType<RibosomeSelectProps>;
+  badge?: React.ComponentType<RibosomeBadgeProps>;
+  list?: React.ComponentType<RibosomeListProps>;
+  stat?: React.ComponentType<RibosomeStatProps>;
+  divider?: React.ComponentType<RibosomeDividerProps>;
 };
 
 export type RibosomeCallbacks = {

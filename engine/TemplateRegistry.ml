@@ -4,6 +4,12 @@ let all_definitions : TemplateDefinitionTypes.template_definition list = [
   Templates.Submittable.definition;
   Templates.Image.definition;
   Templates.Container.definition;
+  Templates.Button.definition;
+  Templates.Select.definition;
+  Templates.Badge.definition;
+  Templates.List.definition;
+  Templates.Stat.definition;
+  Templates.Divider.definition;
 ]
 
 let definition_for_kind kind =

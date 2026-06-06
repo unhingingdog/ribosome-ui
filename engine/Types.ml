@@ -1,4 +1,4 @@
-type field_type = TemplateDefinitionTypes.field_type = StringField | NumberField | TemplateList | InputList
+type field_type = TemplateDefinitionTypes.field_type = StringField | NumberField | BoolField | ArrayField | TemplateList | InputList
 
 type field_def = TemplateDefinitionTypes.field_def = {
   name: string;
@@ -71,12 +71,83 @@ type broken = Templates.Broken.t =
 let broken_of_json = Templates.Broken.of_json
 let broken_to_json = Templates.Broken.to_json
 
-type container = template Templates.Container.t and template =
+type button_action = Templates.Button.action =
+  | Navigate of string
+  | Submit
+  | Custom of string
+
+let button_action_of_json = Templates.Button.action_of_json
+
+type button = Templates.Button.t = {
+  kind: string;
+  id: string;
+  label: string;
+  action: button_action;
+  disabled: bool option;
+}
+
+let button_of_json = Templates.Button.of_json
+
+type select_option = Templates.Select.option_ = {
+  value: string;
+  label: string;
+}
+
+type select = Templates.Select.t = {
+  kind: string;
+  id: string;
+  label: string;
+  options: select_option list;
+  selected: string option;
+}
+
+let select_of_json = Templates.Select.of_json
+
+type badge_variant = Templates.Badge.badge_variant = Neutral | Success | Warning | Error | Info
+
+let badge_variant_of_string = Templates.Badge.badge_variant_of_string
+let badge_variant_of_json = Templates.Badge.badge_variant_of_json
+
+type badge = Templates.Badge.t = {
+  kind: string;
+  id: string;
+  label: string;
+  variant: badge_variant;
+}
+
+let badge_of_json = Templates.Badge.of_json
+
+type stat = Templates.Stat.t = {
+  kind: string;
+  id: string;
+  label: string;
+  value: string;
+  secondary: string option;
+}
+
+let stat_of_json = Templates.Stat.of_json
+
+type divider = Templates.Divider.t = {
+  kind: string;
+  id: string;
+  label: string option;
+}
+
+let divider_of_json = Templates.Divider.of_json
+
+type container = template Templates.Container.t and template_list = template Templates.List.t and template =
   | Input of input
   | Submittable of submittable
   | Image of image
   | Text of text 
   | Container of container 
   | Broken of broken
+  | Button of button
+  | Select of select
+  | Badge of badge
+  | List of template_list
+  | Stat of stat
+  | Divider of divider
 
 let container_of_json = Templates.Container.of_json
+let template_list_of_json = Templates.List.of_json

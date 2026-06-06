@@ -93,6 +93,7 @@ const resolveRoot = (root) => {
 };
 
 const textTypes = ["Paragraph", "H1", "H2", "H3", "H4", "H5", "H6"];
+const badgeVariants = ["Neutral", "Success", "Warning", "Error", "Info"];
 
 const inputValueToPublic = (value) => {
   if (value && typeof value === "object" && "TAG" in value) return value._0;
@@ -107,6 +108,22 @@ const inputValueToInternal = (value) => {
 const inputToPublic = (input) => ({
   ...input,
   value: inputValueToPublic(input.value),
+});
+
+const buttonActionToPublic = (action) => {
+  if (action === 0) return "Submit";
+  if (action && typeof action === "object" && action.TAG === 0) {
+    return `Navigate:${action._0}`;
+  }
+  if (action && typeof action === "object" && action.TAG === 1) {
+    return action._0;
+  }
+  return action;
+};
+
+const withPublicChildren = (props) => ({
+  ...props,
+  children: props.children === 0 ? null : props.children,
 });
 
 const submissionToInternal = (payload) => ({
@@ -126,10 +143,7 @@ const brokenMessage = (props) => {
 
 const adaptComponents = (components) => ({
   container: (props) => {
-    const publicProps = {
-      ...props,
-      children: props.children === 0 ? null : props.children,
-    };
+    const publicProps = withPublicChildren(props);
     debug("[ribosome adapter] render container props", publicProps);
     return React.createElement(components.container, publicProps);
   },
@@ -172,6 +186,55 @@ const adaptComponents = (components) => ({
       };
       debug("[ribosome adapter] render text props", publicProps);
       return React.createElement(components.text, publicProps);
+    }
+    : undefined,
+  button: components.button
+    ? (props) => {
+      const publicProps = {
+        ...props,
+        action: buttonActionToPublic(props.action),
+      };
+      debug("[ribosome adapter] render button props", publicProps);
+      return React.createElement(components.button, publicProps);
+    }
+    : undefined,
+  select: components.select
+    ? (props) => {
+      const publicProps = {
+        ...props,
+        options: ocamlListToArray(props.options),
+      };
+      debug("[ribosome adapter] render select props", publicProps);
+      return React.createElement(components.select, publicProps);
+    }
+    : undefined,
+  badge: components.badge
+    ? (props) => {
+      const publicProps = {
+        ...props,
+        variant: badgeVariants[props.variant] ?? props.variant,
+      };
+      debug("[ribosome adapter] render badge props", publicProps);
+      return React.createElement(components.badge, publicProps);
+    }
+    : undefined,
+  list: components.list
+    ? (props) => {
+      const publicProps = withPublicChildren(props);
+      debug("[ribosome adapter] render list props", publicProps);
+      return React.createElement(components.list, publicProps);
+    }
+    : undefined,
+  stat: components.stat
+    ? (props) => {
+      debug("[ribosome adapter] render stat props", props);
+      return React.createElement(components.stat, props);
+    }
+    : undefined,
+  divider: components.divider
+    ? (props) => {
+      debug("[ribosome adapter] render divider props", props);
+      return React.createElement(components.divider, props);
     }
     : undefined,
 });

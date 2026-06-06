@@ -1,13 +1,5 @@
 open Melange_json.Primitives
 
-let optional_field name decoder json =
-  match Js.Json.decodeObject json with
-  | None -> None
-  | Some obj ->
-    match Js.Dict.get obj name with
-    | None -> None
-    | Some value -> Some (decoder value)
-
 type text_type = Paragraph | H1 | H2 | H3 | H4 | H5 | H6
 
 let text_type_of_string = function
@@ -54,7 +46,7 @@ let of_json json =
     id = field "id" string json;
     text_type = field "text_type" text_type_of_json json;
     content =
-      match optional_field "value" string json with
+      match Helpers.optional_field "value" string json with
       | Some value -> value
       | None -> field "content" string json;
   }

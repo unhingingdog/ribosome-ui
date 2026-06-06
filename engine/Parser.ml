@@ -17,6 +17,12 @@ let parse_template json =
   | "input" -> catch (fun () -> Input (input_of_json json))
   | "submittable" -> catch (fun () -> Submittable (submittable_of_json json))
   | "container" -> catch (fun () -> Container (container_of_json json))
+  | "button" -> catch (fun () -> Button (button_of_json json))
+  | "select" -> catch (fun () -> Select (select_of_json json))
+  | "badge" -> catch (fun () -> Badge (badge_of_json json))
+  | "list" -> catch (fun () -> List (template_list_of_json json))
+  | "stat" -> catch (fun () -> Stat (stat_of_json json))
+  | "divider" -> catch (fun () -> Divider (divider_of_json json))
   | kind -> 
     debug "[ribosome parsing] Soft failure - Unknown template kind" kind;
     Broken (Soft "Unknown template")
@@ -87,7 +93,10 @@ let rec expand_template json =
     | Container container -> 
       let decoded_with_children = Container { container with children = decoded_children } in
       decoded_with_children
-    | _ -> Broken (Hard "Encounterd non-container with children")
+    | List list ->
+      let decoded_with_children = List { list with children = decoded_children } in
+      decoded_with_children
+    | _ -> Broken (Hard "Encountered template with unsupported children")
 
 let parse_data data = 
   Result.map expand_template (serialise_json data) 
