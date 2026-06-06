@@ -136,13 +136,14 @@ and kick_off t =
     run_turn t ~user_message:t.config.goal_prompt ~interaction_goal:None
 
 and submit t payload =
-  Utils.Log.debug1 "[ribosome engine] submit";
+  Utils.Log.debug "[ribosome engine] submit payload template_id" payload.SubmitTypes.template_id;
   t.config.callbacks.on_submit payload;
   let interaction_goal =
     payload
     |> SubmitTypes.submission_payload_to_json
     |> Melange_json.to_string
   in
+  Utils.Log.debug "[ribosome engine] submit serialized interaction_goal" interaction_goal;
   let prompt =
     Prompt.create_llm_prompt
       t.config.templates
@@ -152,6 +153,7 @@ and submit t payload =
   in
   match State.kick_off t.state ~prompt with
   | Error message ->
+    Utils.Log.debug "[ribosome engine] submit kick_off rejected" message;
     set_error t message
   | Ok state ->
     t.state <- state;
