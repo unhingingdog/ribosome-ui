@@ -11,3 +11,8 @@ type submission_payload = {
   values: submitted_input list;
 } [@@deriving json]
 
+type user_turn = {
+  tree_snapshot: string;
+  user_input: submission_payload;
+}
+
