@@ -29,7 +29,7 @@ type callbacks = {
 type config = {
   root: EngineFrontendReact.dom_handle;
   components: EngineFrontendReact.component_registry;
-  templates: Prompt.template_registry;
+  templates: string list;
   assets: Prompt.asset_registry;
   goal_prompt: string;
   request: request_context -> request_config;

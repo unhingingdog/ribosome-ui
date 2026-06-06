@@ -5,21 +5,7 @@ module Markdown = struct
   let subsubheading content = "### " ^ content
 end
 
-type template_field = {
-  name: string;
-  type_: string;
-  required: bool;
-  instructions: string;
-}
-
-type template_definition = {
-  kind: string;
-  intent: string;
-  instructions: string;
-  fields: template_field list;
-}
-
-type template_registry = template_definition list
+type template_registry = TemplateDefinitionTypes.template_definition list
 
 type asset_definition = {
   id: string;
@@ -32,12 +18,18 @@ type asset_registry = asset_definition list
 let required_label required =
   if required then "required" else "optional"
 
-let field_to_prompt field =
+let field_type_label = function
+  | TemplateDefinitionTypes.StringField -> "string"
+  | TemplateDefinitionTypes.NumberField -> "number"
+  | TemplateDefinitionTypes.TemplateList -> "template[]"
+  | TemplateDefinitionTypes.InputList -> "input[]"
+
+let field_to_prompt (field: TemplateDefinitionTypes.field_def) =
   "- " ^ field.name
-  ^ " (" ^ field.type_ ^ ", " ^ required_label field.required ^ "): "
+  ^ " (" ^ field_type_label field.field_type ^ ", " ^ required_label field.required ^ "): "
   ^ field.instructions
 
-let template_to_prompt template =
+let template_to_prompt (template: TemplateDefinitionTypes.template_definition) =
   String.concat "\n" [
     Markdown.subheading template.kind;
     "Intent: " ^ template.intent;
@@ -189,7 +181,8 @@ let layout_thinking_section =
        ] }";
   ]
 
-let schema_section registry =
+let schema_section active_kinds =
+  let definitions = TemplateRegistry.definitions_for_kinds active_kinds in
   String.concat "\n\n" [
     Markdown.heading "Available Templates";
     "Use ONLY the types below. Nest them freely via `children` wherever \
@@ -197,7 +190,7 @@ let schema_section registry =
      you reach for — the right template used correctly is always better \
      than a generic container used as a fallback.";
     Markdown.divider ();
-    parse_registry_to_prompt registry;
+    parse_registry_to_prompt definitions;
     Markdown.divider ();
   ]
 
@@ -215,7 +208,7 @@ let output_contract_section =
      Do not restart or emit multiple objects.";
   ]
 
-let create_llm_prompt registry assets base_goal_prompt interaction_goal =
+let create_llm_prompt active_kinds assets base_goal_prompt interaction_goal =
   let domain_section =
     String.concat "\n\n" [
       Markdown.heading "Domain";
@@ -243,7 +236,7 @@ let create_llm_prompt registry assets base_goal_prompt interaction_goal =
     domain_section;
     hard_rules_section;
     layout_thinking_section;
-    schema_section registry;
+    schema_section active_kinds;
     assets_section assets;
     output_contract_section;
     Markdown.divider ();

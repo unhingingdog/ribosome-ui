@@ -15,47 +15,7 @@ let contains haystack needle =
 let assert_contains label haystack needle =
   assert_true label (contains haystack needle)
 
-let text_template = {
-  Prompt.kind = "text";
-  intent = "Render readable textual content.";
-  instructions = "Use text for copy, labels, and explanatory content.";
-  fields = [
-    {
-      name = "kind";
-      type_ = "string literal \"text\"";
-      required = true;
-      instructions = "Must be exactly \"text\".";
-    };
-    {
-      name = "content";
-      type_ = "string";
-      required = true;
-      instructions = "The visible text to render.";
-    };
-  ];
-}
-
-let container_template = {
-  Prompt.kind = "container";
-  intent = "Group child templates into one layout section.";
-  instructions = "Use containers when the response needs nested structure.";
-  fields = [
-    {
-      name = "kind";
-      type_ = "string literal \"container\"";
-      required = true;
-      instructions = "Must be exactly \"container\".";
-    };
-    {
-      name = "children";
-      type_ = "template[]";
-      required = true;
-      instructions = "Child templates to render inside the container.";
-    };
-  ];
-}
-
-let registry = [ text_template; container_template ]
+let registry = TemplateRegistry.all_definitions
 
 let assets = [
   {
@@ -69,13 +29,13 @@ let test_parse_registry_to_prompt () =
   let prompt = Prompt.parse_registry_to_prompt registry in
   assert_contains "registry includes text heading" prompt "## text";
   assert_contains "registry includes container heading" prompt "## container";
-  assert_contains "registry includes field requirement" prompt "content (string, required)";
-  assert_contains "registry includes instructions" prompt "Use containers when the response needs nested structure."
+  assert_contains "registry includes field requirement" prompt "value (string, required)";
+  assert_contains "registry includes instructions" prompt "Use container for layout, grouping"
 
 let test_create_llm_prompt () =
   let prompt =
     Prompt.create_llm_prompt
-      registry
+      [ "text"; "container" ]
       assets
       "Build a lesson UI for biology."
       (Some "The user wants to compare ribosomes and mitochondria.")

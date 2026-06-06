@@ -1,4 +1,5 @@
 (copy_files ../engine/State.ml)
+(copy_files ../engine/TemplateDefinitionTypes.ml)
 (copy_files ../engine/Prompt.ml)
 
 (test
@@ -7,4 +8,4 @@
 
 (test
  (name prompt_test)
- (modules Prompt prompt_test))
+ (modules TemplateDefinitionTypes TemplateRegistry Prompt prompt_test))

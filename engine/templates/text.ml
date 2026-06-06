@@ -66,3 +66,17 @@ let to_json text =
     ("text_type", text_type_to_json text.text_type);
     ("value", string_to_json text.content);
   |])
+
+let definition : TemplateDefinitionTypes.template_definition =
+  let open TemplateDefinitionTypes in
+  {
+    kind = "text";
+    intent = "Display textual content to the user.";
+    instructions = "Use text for headings, paragraphs, labels, explanations, and short feedback.";
+    fields = [
+      kind_field "text";
+      id_field "text node";
+      string_field "text_type" "One of: Paragraph | H1 | H2 | H3 | H4 | H5 | H6.";
+      string_field "value" "Text content to render.";
+    ];
+  }

@@ -1,3 +1,19 @@
+type field_type = TemplateDefinitionTypes.field_type = StringField | NumberField | TemplateList | InputList
+
+type field_def = TemplateDefinitionTypes.field_def = {
+  name: string;
+  field_type: field_type;
+  required: bool;
+  instructions: string;
+}
+
+type template_definition = TemplateDefinitionTypes.template_definition = {
+  kind: string;
+  intent: string;
+  instructions: string;
+  fields: field_def list;
+}
+
 type input_value = Templates.Input.input_value = Int of int | String of string
 
 let input_value_of_json = Templates.Input.input_value_of_json

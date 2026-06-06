@@ -74,7 +74,7 @@ export type RibosomeSubmissionPayload = {
 };
 
 export type RibosomeComponents = {
-  /** Components are the public template-selection surface. Ribosome renders these and owns their submit lifecycle. */
+  /** Components are the public template-selection surface; template instructions are built in. */
   container: React.ComponentType<RibosomeContainerProps>;
   broken: React.ComponentType<string>;
   input?: React.ComponentType<RibosomeInputProps>;

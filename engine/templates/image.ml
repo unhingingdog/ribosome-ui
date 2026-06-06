@@ -6,3 +6,17 @@ type t = {
   src: string;
   alt: string;
 } [@@deriving json]
+
+let definition : TemplateDefinitionTypes.template_definition =
+  let open TemplateDefinitionTypes in
+  {
+    kind = "image";
+    intent = "Display an image by URL.";
+    instructions = "Use image only when visual content directly helps satisfy the user's goal.";
+    fields = [
+      kind_field "image";
+      id_field "image";
+      string_field "src" "Image URL.";
+      string_field "alt" "Accessible description of the image.";
+    ];
+  }

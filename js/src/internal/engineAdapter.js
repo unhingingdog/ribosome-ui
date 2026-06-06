@@ -32,105 +32,13 @@ const ocamlListToArray = (list) => {
 const arrayToOcamlList = (items) =>
   items.reduceRight((tl, hd) => ({ hd, tl }), 0);
 
-const field = (name, type, required, instructions) => ({
-  name,
-  type_: type,
-  required,
-  instructions,
-});
-
-const template = (kind, intent, instructions, fields) => ({
-  kind,
-  intent,
-  instructions,
-  fields: arrayToOcamlList(fields),
-});
-
-const templateDefinitions = {
-  container: template(
-    "container",
-    "Group one or more templates into a nested rendered section.",
-    "Use container for layout, grouping, and nesting other available templates.",
-    [
-      field("kind", "string", true, "Always container."),
-      field("id", "string", true, "Stable id for this container."),
-      field(
-        "children",
-        "template[]",
-        true,
-        "Child templates to render inside this container.",
-      ),
-    ],
-  ),
-  input: template(
-    "input",
-    "Collect a user-editable value inside a submittable template.",
-    "Only render input as part of a submittable template's value array.",
-    [
-      field("kind", "string", true, "Always input."),
-      field("id", "string", true, "Stable id for this input."),
-      field(
-        "value",
-        "string | number",
-        true,
-        "Initial input value as a raw JSON string or number.",
-      ),
-    ],
-  ),
-  submittable: template(
-    "submittable",
-    "Present a submit-capable interaction that can start the next model turn.",
-    "Use submittable when the user needs to provide data or make a choice before continuing.",
-    [
-      field("kind", "string", true, "Always submittable."),
-      field("id", "string", true, "Stable id for this submittable template."),
-      field(
-        "value",
-        "input[]",
-        true,
-        "Inputs included in this submit-capable interaction.",
-      ),
-    ],
-  ),
-  image: template(
-    "image",
-    "Display an image by URL.",
-    "Use image only when visual content directly helps satisfy the user's goal.",
-    [
-      field("kind", "string", true, "Always image."),
-      field("id", "string", true, "Stable id for this image."),
-      field("src", "string", true, "Image URL."),
-      field("alt", "string", true, "Accessible description of the image."),
-    ],
-  ),
-  text: template(
-    "text",
-    "Display textual content to the user.",
-    "Use text for headings, paragraphs, labels, explanations, and short feedback.",
-    [
-      field("kind", "string", true, "Always text."),
-      field("id", "string", true, "Stable id for this text node."),
-      field(
-        "text_type",
-        "Paragraph | H1 | H2 | H3 | H4 | H5 | H6",
-        true,
-        'Text presentation style as a raw JSON string, for example "H1".',
-      ),
-      field("value", "string", true, "Text content to render."),
-    ],
-  ),
-};
-
 const buildTemplateRegistry = (components) => {
-  const registry = [templateDefinitions.container];
-
-  for (const kind of ["input", "submittable", "image", "text"]) {
-    if (components[kind]) registry.push(templateDefinitions[kind]);
-  }
+  const registry = Object.keys(components)
+    .filter((kind) => kind !== "broken" && components[kind]);
 
   debug(
     "[ribosome adapter] template registry",
-    registry.map((template) => template.kind),
+    registry,
   );
   return arrayToOcamlList(registry);
 };
