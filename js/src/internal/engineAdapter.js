@@ -54,7 +54,12 @@ const templateDefinitions = {
     [
       field("kind", "string", true, "Always container."),
       field("id", "string", true, "Stable id for this container."),
-      field("children", "template[]", true, "Child templates to render inside this container."),
+      field(
+        "children",
+        "template[]",
+        true,
+        "Child templates to render inside this container.",
+      ),
     ],
   ),
   input: template(
@@ -64,7 +69,12 @@ const templateDefinitions = {
     [
       field("kind", "string", true, "Always input."),
       field("id", "string", true, "Stable id for this input."),
-      field("value", "string | number", true, "Initial input value as a raw JSON string or number."),
+      field(
+        "value",
+        "string | number",
+        true,
+        "Initial input value as a raw JSON string or number.",
+      ),
     ],
   ),
   submittable: template(
@@ -74,7 +84,12 @@ const templateDefinitions = {
     [
       field("kind", "string", true, "Always submittable."),
       field("id", "string", true, "Stable id for this submittable template."),
-      field("value", "input[]", true, "Inputs included in this submit-capable interaction."),
+      field(
+        "value",
+        "input[]",
+        true,
+        "Inputs included in this submit-capable interaction.",
+      ),
     ],
   ),
   image: template(
@@ -95,7 +110,12 @@ const templateDefinitions = {
     [
       field("kind", "string", true, "Always text."),
       field("id", "string", true, "Stable id for this text node."),
-      field("text_type", "Paragraph | H1 | H2 | H3 | H4 | H5 | H6", true, "Text presentation style as a raw JSON string, for example \"H1\"."),
+      field(
+        "text_type",
+        "Paragraph | H1 | H2 | H3 | H4 | H5 | H6",
+        true,
+        'Text presentation style as a raw JSON string, for example "H1".',
+      ),
       field("value", "string", true, "Text content to render."),
     ],
   ),
@@ -108,7 +128,10 @@ const buildTemplateRegistry = (components) => {
     if (components[kind]) registry.push(templateDefinitions[kind]);
   }
 
-  debug("[ribosome adapter] template registry", registry.map((template) => template.kind));
+  debug(
+    "[ribosome adapter] template registry",
+    registry.map((template) => template.kind),
+  );
   return arrayToOcamlList(registry);
 };
 
@@ -129,9 +152,9 @@ const buildRequest =
         url,
         headers: normaliseHeaders(headers),
         body: JSON.stringify({
-        model,
-        stream: true,
-        messages: openAIMessages(context),
+          model,
+          stream: true,
+          messages: openAIMessages(context),
         }),
       };
 
@@ -200,38 +223,39 @@ const adaptComponents = (components) => ({
   },
   input: components.input
     ? (props) => {
-        const publicProps = inputToPublic(props);
-        debug("[ribosome adapter] render input props", publicProps);
-        return React.createElement(components.input, publicProps);
-      }
+      const publicProps = inputToPublic(props);
+      debug("[ribosome adapter] render input props", publicProps);
+      return React.createElement(components.input, publicProps);
+    }
     : undefined,
   submittable: components.submittable
     ? (props) => {
-        const publicProps = {
-          ...props,
-          value: ocamlListToArray(props.value).map(inputToPublic),
-          on_submit: (payload) => props.on_submit(submissionToInternal(payload)),
-        };
-        debug("[ribosome adapter] render submittable props", publicProps);
-        return React.createElement(components.submittable, publicProps);
-      }
+      const publicProps = {
+        ...props,
+        value: ocamlListToArray(props.value).map(inputToPublic),
+        on_submit: (payload) =>
+          props.on_submit(submissionToInternal(payload)),
+      };
+      debug("[ribosome adapter] render submittable props", publicProps);
+      return React.createElement(components.submittable, publicProps);
+    }
     : undefined,
   image: components.image
     ? (props) => {
-        debug("[ribosome adapter] render image props", props);
-        return React.createElement(components.image, props);
-      }
+      debug("[ribosome adapter] render image props", props);
+      return React.createElement(components.image, props);
+    }
     : undefined,
   text: components.text
     ? (props) => {
-        const publicProps = {
-          ...props,
-          text_type: textTypes[props.text_type] ?? props.text_type,
-          value: props.content,
-        };
-        debug("[ribosome adapter] render text props", publicProps);
-        return React.createElement(components.text, publicProps);
-      }
+      const publicProps = {
+        ...props,
+        text_type: textTypes[props.text_type] ?? props.text_type,
+        value: props.content,
+      };
+      debug("[ribosome adapter] render text props", publicProps);
+      return React.createElement(components.text, publicProps);
+    }
     : undefined,
 });
 
@@ -241,15 +265,14 @@ export function createEngineAdapter(config) {
   const engine = create({
     root: resolveRoot(config.root),
     goal_prompt: config.goalPrompt,
-    // Component registration is intentionally public: supplying components selects the renderable template surface.
     components: adaptComponents(config.components),
     templates: buildTemplateRegistry(config.components),
     request: buildRequest(config.url, config.headers, model),
     stream_adapter: resolveAdapter(config.adapterConfig),
     callbacks: {
-      on_error: config.callbacks?.on_error ?? (() => {}),
-      on_submit: config.callbacks?.on_submit ?? (() => {}),
-      on_message_complete: config.callbacks?.on_message_complete ?? (() => {}),
+      on_error: config.callbacks?.on_error ?? (() => { }),
+      on_submit: config.callbacks?.on_submit ?? (() => { }),
+      on_message_complete: config.callbacks?.on_message_complete ?? (() => { }),
     },
   });
 

@@ -11,3 +11,7 @@ js/node_modules/
 # agent files
 plan.md
 plan-steps.md
+all_ml.txt
+
+# bullshit
+.DS_Store
