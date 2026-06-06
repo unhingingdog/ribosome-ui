@@ -28,6 +28,7 @@ const config = (overrides = {}) => ({
   root: { TAG: 1, _0: "missing-root" },
   components: {},
   templates: 0,
+  assets: 0,
   goal_prompt: "Render the first UI",
   request: vi.fn(() => ({ url: "/stream", headers: [], body: "{}" })),
   stream_adapter: vi.fn((payload) => ({ TAG: 0, _0: payload })),

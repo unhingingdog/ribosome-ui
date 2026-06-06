@@ -135,6 +135,15 @@ const buildTemplateRegistry = (components) => {
   return arrayToOcamlList(registry);
 };
 
+const buildAssetRegistry = (assets) =>
+  arrayToOcamlList(
+    (assets ?? []).map((asset) => ({
+      id: asset.id,
+      url: asset.url,
+      description: asset.description ?? "",
+    })),
+  );
+
 const openAIRole = (role) => (role === 0 ? "user" : "assistant");
 
 const openAIMessages = (context) => [
@@ -267,6 +276,7 @@ export function createEngineAdapter(config) {
     goal_prompt: config.goalPrompt,
     components: adaptComponents(config.components),
     templates: buildTemplateRegistry(config.components),
+    assets: buildAssetRegistry(config.assets),
     request: buildRequest(config.url, config.headers, model),
     stream_adapter: resolveAdapter(config.adapterConfig),
     callbacks: {

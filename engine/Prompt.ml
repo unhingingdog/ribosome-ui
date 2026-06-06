@@ -21,6 +21,14 @@ type template_definition = {
 
 type template_registry = template_definition list
 
+type asset_definition = {
+  id: string;
+  url: string;
+  description: string;
+}
+
+type asset_registry = asset_definition list
+
 let required_label required =
   if required then "required" else "optional"
 
@@ -41,6 +49,21 @@ let template_to_prompt template =
 let parse_registry_to_prompt registry =
   String.concat "\n\n" (List.map template_to_prompt registry)
 
+let asset_to_prompt asset =
+  "- " ^ asset.id ^ ": " ^ asset.url ^ " — " ^ asset.description
+
+let assets_section assets =
+  match assets with
+  | [] -> ""
+  | _ ->
+      String.concat "\n\n" [
+        Markdown.heading "Assets";
+        "These are the only provided assets. When an asset helps the UI, \
+         use an image template and copy the asset URL exactly into `src`. \
+         Write useful `alt` text for the image.";
+        String.concat "\n" (List.map asset_to_prompt assets);
+      ]
+
 let identity_section =
   String.concat "\n\n" [
     Markdown.heading "Role";
@@ -58,22 +81,21 @@ let hard_rules_section =
      backticks, no explanation before or after the JSON.";
     "ALWAYS: Every object must include a stable `kind` and `id` string. \
      Use ids that describe the role of the node (e.g. \
-     \"hero-heading\", \"flight-results-list\", \
-     \"departure-date-picker\").";
+     \"hero-title\", \"flight-results-group\", \
+     \"departure-date\").";
     "ALWAYS: Every response must contain at least one submittable \
      component so the user can continue the interaction. A screen with \
      no way for the user to respond is broken.";
-    "ALWAYS: Use the richest combination of template types that fits the \
-     content. Match the component to the content type — data goes in \
-     data templates, options go in selection templates, sequences go in \
-     ordered structures.";
+    "ALWAYS: Use the richest combination of available template types that \
+     fits the content. Use containers for semantic groups, text for \
+     labels and explanations, images for useful visuals, submittables for \
+     user actions, and inputs only inside submittables.";
     "NEVER: Return only a text block and a single text input. This \
      ignores your entire template library and produces a chatbot, not a \
      UI.";
-    "NEVER: Use a free-text input when a constrained input fits — \
-     choosing between options means a select or radio group, not a text \
-     field; picking a date means a date input, not a text field asking \
-     the user to type one.";
+    "NEVER: Mention or emit component kinds outside the Available \
+     Templates schema. If the schema does not provide a specialized \
+     component, represent the idea with the available templates instead.";
     "NEVER: Invent template types or fields not listed in the schema. \
      Unknown fields are silently dropped by the parser.";
     "NEVER: Echo the user's submission back as a text template. \
@@ -95,24 +117,24 @@ let layout_thinking_section =
      components describe ONE thing together? If yes, nest them. If no, \
      make them siblings at the current level.\n\n\
      A flight itinerary with departure, arrival, and duration is ONE \
-     thing — card.\n\
-     A heading, a results list, and a filter form are THREE things — \
+     thing — one container with text children.\n\
+     A title text, a results group, and a filter form are THREE things — \
      flat siblings.\n\
-     A filter form with four fields and a submit button is ONE thing — \
+     A filter form with four fields and a submit action is ONE thing — \
      container.";
 
     Markdown.subheading "Content type → layout pattern";
-    "- Entity with attributes → card (nest the attributes inside)\n\
-     - Set of parallel entities → list or grid of those cards (siblings \
-       inside the list, not nested inside each other)\n\
-     - Decision between N options → option group, not a list of text \
-       plus one input\n\
-     - Sequence of steps or stages → stepper or ordered structure\n\
+    "- Entity with attributes → container with text children for each \
+       attribute\n\
+     - Set of parallel entities → one parent container with sibling \
+       entity containers inside it\n\
+     - Decision between N options → text describing the options plus a \
+       submittable with the inputs needed to choose\n\
+     - Sequence of steps or stages → container with ordered text children\n\
      - Form → one container, fields grouped by topic, one submit at the \
        bottom\n\
-     - Mixed content page → top-level section containers as flat \
-       siblings; only nest within a section when components form a unit \
-       inside it";
+     - Mixed content page → top-level containers as flat siblings; only \
+       nest within a container when components form a unit inside it";
 
     Markdown.subheading "Depth rule";
     "Nest when it creates meaning. Stop when it would just be wrapping \
@@ -140,22 +162,26 @@ let layout_thinking_section =
            { \"kind\": \"text\", \"id\": \"t1\", \"content\": \"NZ101\" }\n\
      ] } ] } ] }";
 
-    "GOOD — semantic grouping, content type drives structure:\n\
-     { \"kind\": \"section\", \"id\": \"results\",\n\
+    "GOOD — semantic grouping, content type drives structure, and every \
+     kind exists in the schema:\n\
+     { \"kind\": \"container\", \"id\": \"results\",\n\
        \"children\": [\n\
-         { \"kind\": \"heading\", \"id\": \"results-heading\",\n\
-           \"content\": \"3 flights found\" },\n\
-         { \"kind\": \"list\", \"id\": \"flight-list\",\n\
+         { \"kind\": \"text\", \"id\": \"results-title\",\n\
+           \"text_type\": \"H1\", \"value\": \"3 flights found\" },\n\
+         { \"kind\": \"container\", \"id\": \"flight-results\",\n\
            \"children\": [\n\
-             { \"kind\": \"card\", \"id\": \"flight-nz101\",\n\
+             { \"kind\": \"container\", \"id\": \"flight-nz101\",\n\
                \"children\": [\n\
-                 { \"kind\": \"route\", \"id\": \"nz101-route\",\n\
-                   \"from\": \"AKL\", \"to\": \"WLG\" },\n\
-                 { \"kind\": \"detail-row\", \"id\": \"nz101-duration\",\n\
-                   \"label\": \"Duration\", \"value\": \"1h 10m\" },\n\
-                 { \"kind\": \"button\", \"id\": \"nz101-select\",\n\
-                   \"label\": \"Select\", \"submits\": true }\n\
+                 { \"kind\": \"text\", \"id\": \"nz101-summary\",\n\
+                   \"text_type\": \"H2\", \"value\": \"AKL to WLG\" },\n\
+                 { \"kind\": \"text\", \"id\": \"nz101-duration\",\n\
+                   \"text_type\": \"Paragraph\", \"value\": \"Duration: 1h 10m\" }\n\
                ] }\n\
+           ] },\n\
+         { \"kind\": \"submittable\", \"id\": \"flight-selection\",\n\
+           \"value\": [\n\
+             { \"kind\": \"input\", \"id\": \"selected-flight-id\",\n\
+               \"value\": \"NZ101\" }\n\
            ] }\n\
        ] }";
   ]
@@ -186,7 +212,7 @@ let output_contract_section =
      Do not restart or emit multiple objects.";
   ]
 
-let create_llm_prompt registry base_goal_prompt interaction_goal =
+let create_llm_prompt registry assets base_goal_prompt interaction_goal =
   let domain_section =
     String.concat "\n\n" [
       Markdown.heading "Domain";
@@ -215,6 +241,7 @@ let create_llm_prompt registry base_goal_prompt interaction_goal =
     hard_rules_section;
     layout_thinking_section;
     schema_section registry;
+    assets_section assets;
     output_contract_section;
     Markdown.divider ();
     interaction_section;

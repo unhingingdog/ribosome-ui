@@ -57,9 +57,16 @@ let container_template = {
 
 let registry = [ text_template; container_template ]
 
+let assets = [
+  {
+    Prompt.id = "rice-field";
+    url = "/assets/rice-field.jpg";
+    description = "A green rice field landscape.";
+  }
+]
+
 let test_parse_registry_to_prompt () =
   let prompt = Prompt.parse_registry_to_prompt registry in
-  assert_contains "registry includes available templates heading" prompt "# Available Templates";
   assert_contains "registry includes text heading" prompt "## text";
   assert_contains "registry includes container heading" prompt "## container";
   assert_contains "registry includes field requirement" prompt "content (string, required)";
@@ -69,18 +76,21 @@ let test_create_llm_prompt () =
   let prompt =
     Prompt.create_llm_prompt
       registry
+      assets
       "Build a lesson UI for biology."
       (Some "The user wants to compare ribosomes and mitochondria.")
   in
-  assert_contains "prompt includes task heading" prompt "# Ribosome UI Generation Task";
-  assert_contains "prompt includes domain heading" prompt "## Domain Context";
+  assert_contains "prompt includes role heading" prompt "# Role";
+  assert_contains "prompt includes domain heading" prompt "# Domain";
   assert_contains "prompt includes base prompt" prompt "Build a lesson UI for biology.";
-  assert_contains "prompt includes interaction heading" prompt "## Current Interaction";
+  assert_contains "prompt includes interaction heading" prompt "# Current Interaction Goal";
   assert_contains "prompt includes interaction goal" prompt "compare ribosomes and mitochondria";
+  assert_contains "prompt includes assets heading" prompt "# Assets";
+  assert_contains "prompt includes asset url" prompt "/assets/rice-field.jpg";
   assert_contains "prompt includes output contract" prompt "Return exactly one JSON object";
   assert_contains "prompt references chat history" prompt "Previous chat history and structured user submissions";
-  assert_contains "prompt references submittables" prompt "include a submittable template";
-  assert_contains "prompt includes streaming rule" prompt "When streaming, continue the same JSON object.";
+  assert_contains "prompt references submittables" prompt "at least one submittable";
+  assert_contains "prompt includes streaming rule" prompt "When streaming, continue the same JSON object";
   assert_contains "prompt includes available templates" prompt "# Available Templates"
 
 let () =

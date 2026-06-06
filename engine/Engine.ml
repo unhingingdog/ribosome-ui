@@ -103,6 +103,7 @@ and run_turn t ~user_message ~interaction_goal =
     system_prompt =
       Prompt.create_llm_prompt
         t.config.templates
+        t.config.assets
         t.config.goal_prompt
         interaction_goal;
     messages = t.history;
@@ -123,6 +124,7 @@ and kick_off t =
   let prompt =
     Prompt.create_llm_prompt
       t.config.templates
+      t.config.assets
       t.config.goal_prompt
       None
   in
@@ -144,6 +146,7 @@ and submit t payload =
   let prompt =
     Prompt.create_llm_prompt
       t.config.templates
+      t.config.assets
       t.config.goal_prompt
       (Some interaction_goal)
   in

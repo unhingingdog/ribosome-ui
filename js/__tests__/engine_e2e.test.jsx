@@ -139,6 +139,7 @@ describe.sequential("Engine end-to-end React streaming flow", () => {
       root: { TAG: 1, _0: "root" },
       components,
       templates: 0,
+      assets: 0,
       goal_prompt: "Collect profile details",
       request,
       stream_adapter: (payload) => ({ TAG: 0, _0: payload }),

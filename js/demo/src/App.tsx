@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import createEngine, {
   type RibosomeConfig,
   type RibosomeAdapterConfig,
+  type RibosomeAsset,
   type RibosomeContainerProps,
   type RibosomeImageProps,
   type RibosomeInputProps,
@@ -16,6 +17,7 @@ type DemoSettings = {
   goalPrompt: string;
   url: string;
   headers: Record<string, string>;
+  assets: RibosomeAsset[];
   adapterConfig?: {
     adapter: "openai";
     model?: RibosomeAdapterConfig["model"];
@@ -33,6 +35,13 @@ const defaultSettings: DemoSettings = {
     Authorization: "Bearer YOUR_OPENAI_API_KEY",
     "Content-Type": "application/json",
   },
+  assets: [
+    {
+      id: "rice-field",
+      url: "/assets/rice-field.jpg",
+      description: "A green rice field landscape for agricultural or nature-themed UIs.",
+    },
+  ],
   adapterConfig: {
     adapter: "openai",
     model: "gpt-4o-mini",
@@ -119,16 +128,25 @@ const Submittable = ({ id, value, on_submit }: RibosomeSubmittableProps) => (
 
 const Image = ({ src, alt }: RibosomeImageProps) => <img src={src} alt={alt} />;
 
-const Text = ({ value }: RibosomeTextProps) => <p>{value}</p>;
+const Text = ({ text_type, value }: RibosomeTextProps) => {
+  if (text_type === "H1") return <h1>{value}</h1>;
+  if (text_type === "H2") return <h2>{value}</h2>;
+  if (text_type === "H3") return <h3>{value}</h3>;
+  if (text_type === "H4") return <h4>{value}</h4>;
+  if (text_type === "H5") return <h5>{value}</h5>;
+  if (text_type === "H6") return <h6>{value}</h6>;
+
+  return <p>{value}</p>;
+};
 
 const components = {
-  container: Container as RibosomeConfig["components"]["container"],
-  broken: Broken as RibosomeConfig["components"]["broken"],
-  input: Input as RibosomeConfig["components"]["input"],
-  submittable: Submittable as RibosomeConfig["components"]["submittable"],
-  image: Image as RibosomeConfig["components"]["image"],
-  text: Text as RibosomeConfig["components"]["text"],
-};
+  container: Container,
+  broken: Broken,
+  input: Input,
+  submittable: Submittable,
+  image: Image,
+  text: Text,
+} satisfies Required<RibosomeConfig["components"]>;
 
 const formFieldStyle = {
   display: "grid",
@@ -170,6 +188,7 @@ export function App() {
       goalPrompt: activeConfig.goalPrompt,
       url: activeConfig.url,
       headers: activeConfig.headers,
+      assets: activeConfig.assets,
       components,
       adapterConfig: activeConfig.adapterConfig,
     });
@@ -185,6 +204,7 @@ export function App() {
       goalPrompt: draft.goalPrompt,
       url: draft.url,
       headers: draft.headers,
+      assets: draft.assets,
       adapterConfig: draft.adapterConfig,
     };
 
@@ -209,6 +229,7 @@ export function App() {
       activeConfig.goalPrompt,
       activeConfig.url,
       activeConfig.headers.Authorization,
+      activeConfig.assets.map((asset) => asset.id).join(", "),
       activeConfig.adapterConfig?.model ?? "",
     ].filter(Boolean);
   }, [activeConfig]);

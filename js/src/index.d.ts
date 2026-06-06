@@ -45,6 +45,8 @@ export type RibosomeImageProps = {
 };
 
 export type RibosomeContainerProps = {
+  kind: "container";
+  id: string;
   children?: React.ReactNode;
   [key: string]: unknown;
 };
@@ -80,12 +82,19 @@ export type RibosomeCallbacks = {
   on_message_complete?: (template: unknown) => void;
 };
 
+export type RibosomeAsset = {
+  id: string;
+  url: string;
+  description?: string;
+};
+
 export type RibosomeConfig = {
   root: Element | string;
   goalPrompt: string;
   url: string;
   headers?: RibosomeHeaders;
   components: RibosomeComponents;
+  assets?: RibosomeAsset[];
   callbacks?: RibosomeCallbacks;
 } & { adapterConfig?: RibosomeAdapterConfig };
 
