@@ -7,7 +7,7 @@ type 'props component_match = ('props component * 'props)
 type submittable_props = {
   kind: string;
   id: string;
-  value: input list;
+  value: submittable_field list;
   on_submit: SubmitTypes.submission_payload -> unit;
 }
 

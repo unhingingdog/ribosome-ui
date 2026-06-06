@@ -110,10 +110,12 @@ export type RibosomeDividerProps = {
   label?: string;
 };
 
+export type RibosomeSubmittableField = RibosomeInputProps | RibosomeSelectProps;
+
 export type RibosomeSubmittableProps = {
   id: string;
   kind: "submittable";
-  value: RibosomeInputProps[];
+  value: RibosomeSubmittableField[];
   on_submit: (payload: RibosomeSubmissionPayload) => void;
 };
 

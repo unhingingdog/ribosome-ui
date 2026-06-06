@@ -1,4 +1,5 @@
 (* TODO: revise low quality AI code *)
+open Melange_json.Primitives
 
 type option_ = {
   value: string;
@@ -11,6 +12,12 @@ let option_of_json json =
     value = field "value" string json;
     label = field "label" string json;
   }
+
+let option_to_json (option_: option_) =
+  Js.Json.object_ (Js.Dict.fromArray [|
+    ("value", string_to_json option_.value);
+    ("label", string_to_json option_.label);
+  |])
 
 let options_of_array arr =
   let rec loop index result =
@@ -41,6 +48,20 @@ let of_json json =
       ) json;
     selected = Helpers.optional_field "selected" string json;
   }
+
+let to_json (select: t) =
+  let base = [
+    ("kind", string_to_json select.kind);
+    ("id", string_to_json select.id);
+    ("label", string_to_json select.label);
+    ("options", list_to_json option_to_json select.options);
+  ] in
+  let fields =
+    match select.selected with
+    | Some selected -> base @ [("selected", string_to_json selected)]
+    | None -> base
+  in
+  Js.Json.object_ (Js.Dict.fromArray (Array.of_list fields))
 
 let definition : TemplateDefinitionTypes.template_definition =
   let open TemplateDefinitionTypes in

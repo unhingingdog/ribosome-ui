@@ -129,21 +129,34 @@ const Submittable = ({ id, value, on_submit }: RibosomeSubmittableProps) => (
     onSubmit={(event) => {
       event.preventDefault();
       const formData = new FormData(event.currentTarget);
-      on_submit({
+
+      console.log("[ribosome submit] form fields", value);
+      console.log("[ribosome submit] raw FormData", [...formData.entries()]);
+
+      const payload = {
         templateId: id,
-        values: value.map((input) => ({
-          id: input.id,
-          value: formData.get(input.id) ?? input.value,
+        values: value.map((field) => ({
+          id: field.id,
+          value:
+            formData.get(field.id) ??
+            (field.kind === "select" ? field.selected ?? "" : field.value),
         })),
-      });
+      };
+
+      console.log("[ribosome submit] payload -> on_submit", payload);
+      on_submit(payload);
     }}
   >
-    {value.map((input) => (
-      <div key={input.id}>
-        <label htmlFor={input.id}>{input.id}</label>
-        <Input {...input} />
-      </div>
-    ))}
+    {value.map((field) =>
+      field.kind === "select" ? (
+        <Select key={field.id} {...field} />
+      ) : (
+        <div key={field.id}>
+          <label htmlFor={field.id}>{field.id}</label>
+          <Input {...field} />
+        </div>
+      ),
+    )}
     <button type="submit">Submit</button>
   </form>
 );
@@ -299,8 +312,12 @@ export function App() {
   };
 
   const resetConfig = () => {
+    const restored = readSavedSettings() ?? activeConfig;
+    if (restored) {
+      setDraft({ ...restored, persist: false });
+    }
     clearSettings();
-    window.location.reload();
+    setActiveConfig(null);
   };
 
   const activeModel = useMemo(() => {

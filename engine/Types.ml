@@ -28,10 +28,17 @@ type input = Templates.Input.t = {
 let input_of_json = Templates.Input.of_json
 let input_to_json = Templates.Input.to_json
 
+type submittable_field = Templates.Submittable.field =
+  | FieldInput of input
+  | FieldSelect of Templates.Select.t
+
+let submittable_field_of_json = Templates.Submittable.field_of_json
+let submittable_field_to_json = Templates.Submittable.field_to_json
+
 type submittable = Templates.Submittable.t = {
   kind: string;
   id: string;
-  value: input list;
+  value: submittable_field list;
 }
 
 let submittable_of_json = Templates.Submittable.of_json

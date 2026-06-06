@@ -20,6 +20,11 @@ const listToArray = (items) => {
   return result;
 };
 
+// submittable.value is a list of a field variant at the raw OCaml boundary:
+//   FieldInput  -> { TAG: 0, _0: input }
+//   FieldSelect -> { TAG: 1, _0: select }
+const fieldNode = (field) => field._0;
+
 const encode = (value) => new TextEncoder().encode(value);
 
 const createControlledStream = () => {
@@ -87,7 +92,7 @@ const components = {
         on_submit({
           template_id: id,
           values: list(
-            listToArray(value).map((input) => ({
+            listToArray(value).map(fieldNode).map((input) => ({
               id: input.id,
               value: { TAG: 1, _0: data.get(input.id) },
             })),
@@ -95,7 +100,7 @@ const components = {
         });
       }}
     >
-      {listToArray(value).map((input) => (
+      {listToArray(value).map(fieldNode).map((input) => (
         <label key={input.id}>
           {input.id}
           <input name={input.id} defaultValue="" />

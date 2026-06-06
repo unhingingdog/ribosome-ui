@@ -110,6 +110,14 @@ const inputToPublic = (input) => ({
   value: inputValueToPublic(input.value),
 });
 
+// submittable.value is an OCaml list of a field variant:
+//   FieldInput  -> { TAG: 0, _0: input }
+//   FieldSelect -> { TAG: 1, _0: select }
+const submittableFieldToPublic = (field) =>
+  field.TAG === 1
+    ? { ...field._0, options: ocamlListToArray(field._0.options) }
+    : inputToPublic(field._0);
+
 const buttonActionToPublic = (action) => {
   if (action === 0) return "Submit";
   if (action && typeof action === "object" && action.TAG === 0) {
@@ -163,9 +171,13 @@ const adaptComponents = (components) => ({
     ? (props) => {
       const publicProps = {
         ...props,
-        value: ocamlListToArray(props.value).map(inputToPublic),
-        on_submit: (payload) =>
-          props.on_submit(submissionToInternal(payload)),
+        value: ocamlListToArray(props.value).map(submittableFieldToPublic),
+        on_submit: (payload) => {
+          debug("[ribosome adapter] on_submit public payload", payload);
+          const internal = submissionToInternal(payload);
+          debug("[ribosome adapter] on_submit internal payload", internal);
+          return props.on_submit(internal);
+        },
       };
       debug("[ribosome adapter] render submittable props", publicProps);
       return React.createElement(components.submittable, publicProps);
