@@ -101,6 +101,9 @@ let hard_rules_section =
     "NEVER: Echo the user's submission back as a text template. \
      Submissions are inputs to your reasoning, not content to render \
      verbatim.";
+    "NEVER: Provide more that one user input, if the input is not mutually exclusive. \
+     If you provide more than one submit button, then the user will not be able to \
+     provide all the information asked for";
     "NEVER: Produce a partial JSON object or restart the JSON \
      mid-stream. Continue the same object until it is complete.";
   ]

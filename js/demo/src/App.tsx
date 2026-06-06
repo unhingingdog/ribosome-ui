@@ -28,6 +28,22 @@ type DemoDraft = DemoSettings & {
   persist: boolean;
 };
 
+const modelOptions = [
+  "gpt-5.5",
+  "gpt-5.5-pro",
+  "gpt-5.4-mini",
+  "gpt-5.4-nano",
+  "gpt-5",
+  "gpt-5-mini",
+  "gpt-5-nano",
+  "gpt-4o",
+  "gpt-4o-mini",
+  "gpt-4.1",
+  "gpt-4.1-mini",
+  "o3",
+  "o4-mini",
+] satisfies Array<NonNullable<RibosomeAdapterConfig["model"]>>;
+
 const defaultSettings: DemoSettings = {
   goalPrompt: "Create a small UI that asks the user for a name and greets them.",
   url: "https://api.openai.com/v1/chat/completions",
@@ -222,16 +238,8 @@ export function App() {
     window.location.reload();
   };
 
-  const configSummary = useMemo(() => {
-    if (!activeConfig) return null;
-
-    return [
-      activeConfig.goalPrompt,
-      activeConfig.url,
-      activeConfig.headers.Authorization,
-      activeConfig.assets.map((asset) => asset.id).join(", "),
-      activeConfig.adapterConfig?.model ?? "",
-    ].filter(Boolean);
+  const activeModel = useMemo(() => {
+    return activeConfig?.adapterConfig?.model ?? "gpt-4o-mini";
   }, [activeConfig]);
 
   if (!activeConfig) {
@@ -274,20 +282,26 @@ export function App() {
           </div>
           <div style={formFieldStyle}>
             <label htmlFor="model">Model</label>
-            <input
+            <select
               id="model"
-              value={draft.adapterConfig?.model ?? ""}
+              value={draft.adapterConfig?.model ?? "gpt-4o-mini"}
               onChange={(event) =>
                 setDraft((current) => ({
                   ...current,
                   adapterConfig: {
                     adapter: "openai",
-                    model: event.target.value || undefined,
+                    model: event.target.value as RibosomeAdapterConfig["model"],
                   },
                 }))
               }
               style={inputStyle}
-            />
+            >
+              {modelOptions.map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
+              ))}
+            </select>
           </div>
           <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
             <input
@@ -309,7 +323,7 @@ export function App() {
     <main style={{ padding: 16, fontFamily: "sans-serif", maxWidth: 980 }}>
       <h1>Ribosome Demo</h1>
       <Panel>
-        <p>Loaded config: {configSummary?.join(" | ")}</p>
+        <p>Model: {activeModel}</p>
         <button type="button" onClick={resetConfig} style={buttonStyle}>
           Clear saved config and restart
         </button>

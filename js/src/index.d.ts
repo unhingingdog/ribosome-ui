@@ -3,6 +3,13 @@ import type * as React from "react";
 export type RibosomeAdapter = "openai";
 
 export type RibosomeOpenAIModel =
+  | "gpt-5.5"
+  | "gpt-5.5-pro"
+  | "gpt-5.4-mini"
+  | "gpt-5.4-nano"
+  | "gpt-5"
+  | "gpt-5-mini"
+  | "gpt-5-nano"
   | "gpt-4o"
   | "gpt-4o-mini"
   | "gpt-4.1"
