@@ -270,6 +270,7 @@ export function createEngineAdapter(config) {
   });
 
   return {
+    start: () => engine.start(),
     reset: () => engine.reset(),
   };
 }

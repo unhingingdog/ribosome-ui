@@ -29,9 +29,21 @@ export type RibosomeHeaders =
 
 export type RibosomeInputValue = string | number;
 
-export type RibosomeTextType = "Paragraph" | "H1" | "H2" | "H3" | "H4" | "H5" | "H6";
+export type RibosomeTextType =
+  | "Paragraph"
+  | "H1"
+  | "H2"
+  | "H3"
+  | "H4"
+  | "H5"
+  | "H6";
 export type RibosomeButtonAction = "Submit" | `Navigate:${string}` | string;
-export type RibosomeBadgeVariant = "Neutral" | "Success" | "Warning" | "Error" | "Info";
+export type RibosomeBadgeVariant =
+  | "Neutral"
+  | "Success"
+  | "Warning"
+  | "Error"
+  | "Info";
 
 export type RibosomeInputProps = {
   kind: "input";
@@ -166,6 +178,7 @@ export type RibosomeConfig = {
 } & { adapterConfig?: RibosomeAdapterConfig };
 
 export type RibosomeEngine = {
+  start(): void;
   reset(): void;
 };
 

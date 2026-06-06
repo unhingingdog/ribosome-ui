@@ -41,18 +41,23 @@ let require_body res =
   | None -> reject "HTTP response did not include a body"
   | Some body -> Js.Promise.resolve body
 
-let request_config ?(headers=[||]) body =
+let request_config ?signal ?(headers=[||]) body =
   Fetch.RequestInit.make
     ~method_:Post
     ~headers:(Fetch.HeadersInit.makeWithArray headers)
     ~body:(Fetch.BodyInit.make body)
+    ?signal
     ()
 
-let post ~url ~headers ~body ~on_chunk ~on_done ~on_error =
+let was_aborted = function
+  | Some signal -> Fetch.AbortSignal.aborted signal
+  | None -> false
+
+let post ~signal ~url ~headers ~body ~on_chunk ~on_done ~on_error =
   debug "[ribosome http] POST" url;
   debug "[ribosome http] request body" body;
   ignore (
-    Fetch.fetchWithInit url (request_config ~headers body)
+    Fetch.fetchWithInit url (request_config ?signal ~headers body)
     |> Js.Promise.then_ require_ok
     |> Js.Promise.then_ require_body
     |> Js.Promise.then_ (fun body ->
@@ -60,7 +65,12 @@ let post ~url ~headers ~body ~on_chunk ~on_done ~on_error =
       |> get_reader
       |> Stream.pump ~on_chunk ~on_done:(fun () -> notify_complete ~on_done))
     |> Js.Promise.catch (fun exn ->
-      let message = promise_error_to_string exn in
-      debug "[ribosome http] request failed" message;
-      notify_failed ~on_done ~on_error message;
-      Js.Promise.resolve ()))
+      if was_aborted signal then begin
+        debug1 "[ribosome http] request aborted";
+        Js.Promise.resolve ()
+      end else begin
+        let message = promise_error_to_string exn in
+        debug "[ribosome http] request failed" message;
+        notify_failed ~on_done ~on_error message;
+        Js.Promise.resolve ()
+      end))

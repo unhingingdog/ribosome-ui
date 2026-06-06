@@ -277,7 +277,7 @@ export function App() {
   useEffect(() => {
     if (!rootRef.current || !activeConfig) return;
 
-    engineRef.current = createEngine({
+    const engine = createEngine({
       root: rootRef.current,
       goalPrompt: activeConfig.goalPrompt,
       url: activeConfig.url,
@@ -286,9 +286,11 @@ export function App() {
       components,
       adapterConfig: activeConfig.adapterConfig,
     });
+    engineRef.current = engine;
+    engine.start();
 
     return () => {
-      engineRef.current?.reset();
+      engine.reset();
       engineRef.current = null;
     };
   }, [activeConfig]);

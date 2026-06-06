@@ -38,7 +38,7 @@ describe("Http.post", () => {
       ),
     );
 
-    post("/stream", [], "{}", onChunk, onDone, onError);
+    post(undefined, "/stream", [], "{}", onChunk, onDone, onError);
     await flushAsync();
 
     expect(onChunk).toHaveBeenCalledWith("hello");
@@ -55,7 +55,7 @@ describe("Http.post", () => {
       vi.fn(() => Promise.reject(new Error("network failed"))),
     );
 
-    post("/stream", [], "{}", vi.fn(), onDone, onError);
+    post(undefined, "/stream", [], "{}", vi.fn(), onDone, onError);
     await flushAsync();
 
     expect(onDone).toHaveBeenCalledWith({ TAG: 0, _0: "network failed" });

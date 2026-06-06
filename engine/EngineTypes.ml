@@ -38,6 +38,7 @@ type config = {
 }
 
 type handle = {
+  start: unit -> unit;
   reset: unit -> unit;
   history: unit -> chat_message list;
 }

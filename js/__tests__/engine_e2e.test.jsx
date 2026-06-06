@@ -140,7 +140,7 @@ describe.sequential("Engine end-to-end React streaming flow", () => {
         .mockImplementationOnce(() => new Promise(() => {})),
     );
 
-    create({
+    const engine = create({
       root: { TAG: 1, _0: "root" },
       components,
       templates: 0,
@@ -150,6 +150,7 @@ describe.sequential("Engine end-to-end React streaming flow", () => {
       stream_adapter: (payload) => ({ TAG: 0, _0: payload }),
       callbacks,
     });
+    engine.start();
   });
 
   afterAll(() => {

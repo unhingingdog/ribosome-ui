@@ -108,6 +108,15 @@ let state_of_recover_result = function
   | RetryRecv state -> AnyState state
   | Restarted state -> AnyState state
 
+let restart (AnyState state) =
+  match state with
+  | Err (_, _) ->
+    (match transition_errored state Restart with
+     | Restarted idle -> AnyState idle
+     | RetrySend sending -> AnyState sending
+     | RetryRecv receiving -> AnyState receiving)
+  | Idle | Sending _ | Receiving _ -> AnyState state
+
 let kick_off (AnyState state) ~prompt =
   match state with
   | Idle ->

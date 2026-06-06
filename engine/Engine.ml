@@ -8,6 +8,7 @@ type t = {
   mutable processor: Telomere.Processor.processor_state;
   mutable last_template: Types.template option;
   mutable last_error: string option;
+  mutable abort: (unit -> unit) option;
 }
 
 let create_runtime config = {
@@ -18,16 +19,26 @@ let create_runtime config = {
   processor = EngineBackend.initial_processor_state;
   last_template = None;
   last_error = None;
+  abort = None;
 }
+
+let abort_in_flight t =
+  match t.abort with
+  | Some abort ->
+    Utils.Log.debug1 "[ribosome engine] aborting in-flight request";
+    abort ();
+    t.abort <- None
+  | None -> ()
 
 let set_error t details =
   Utils.Log.debug "[ribosome engine] set_error" details;
+  t.abort <- None;
   t.last_error <- Some details;
-  (* TODO: Wire engine retry behavior into the existing State.retry mechanism. *)
   t.state <- State.fail t.state details;
   t.config.callbacks.on_error details
 
 let reset_turn t =
+  abort_in_flight t;
   t.processor <- EngineBackend.initial_processor_state;
   t.last_template <- None;
   t.last_error <- None
@@ -77,8 +88,9 @@ and on_chunk t payload =
     end
 
 and on_done t = function
-  | Http.Failed _ -> ()
+  | Http.Failed _ -> t.abort <- None
   | Http.Complete ->
+    t.abort <- None;
     Utils.Log.debug1 "[ribosome engine] stream complete";
     (match t.last_error with
     | Some _ -> ()
@@ -111,7 +123,10 @@ and run_turn t ~user_message ~interaction_goal =
   let request = t.config.request context in
   Utils.Log.debug "[ribosome engine] request url" request.url;
   Utils.Log.debug "[ribosome engine] request body" request.body;
+  let controller = Fetch.AbortController.make () in
+  t.abort <- Some (fun () -> Fetch.AbortController.abort controller);
   Http.post
+    ~signal:(Some (Fetch.AbortController.signal controller))
     ~url:request.url
     ~headers:request.headers
     ~body:request.body
@@ -121,6 +136,7 @@ and run_turn t ~user_message ~interaction_goal =
 
 and kick_off t =
   Utils.Log.debug1 "[ribosome engine] kick_off";
+  recover_if_errored t;
   let prompt =
     Prompt.create_llm_prompt
       t.config.templates
@@ -135,8 +151,17 @@ and kick_off t =
     t.state <- state;
     run_turn t ~user_message:t.config.goal_prompt ~interaction_goal:None
 
+and recover_if_errored t =
+  match t.last_error with
+  | None -> ()
+  | Some _ ->
+    Utils.Log.debug1 "[ribosome engine] recovering from errored state";
+    t.state <- State.restart t.state;
+    t.last_error <- None
+
 and submit t payload =
   Utils.Log.debug "[ribosome engine] submit payload template_id" payload.SubmitTypes.template_id;
+  recover_if_errored t;
   t.config.callbacks.on_submit payload;
   let interaction_goal =
     payload
@@ -163,14 +188,15 @@ and submit t payload =
       ~interaction_goal:(Some interaction_goal)
 
 let reset t =
+  abort_in_flight t;
   t.state <- State.AnyState State.Idle;
   t.history <- [];
   reset_turn t
 
 let create config =
   let t = create_runtime config in
-  kick_off t;
   {
+    start = (fun () -> kick_off t);
     reset = (fun () -> reset t);
     history = (fun () -> t.history);
   }
