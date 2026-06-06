@@ -4,9 +4,15 @@ import createEngine, {
   type RibosomeConfig,
   type RibosomeAdapterConfig,
   type RibosomeAsset,
+  type RibosomeBadgeProps,
+  type RibosomeButtonProps,
   type RibosomeContainerProps,
+  type RibosomeDividerProps,
   type RibosomeImageProps,
   type RibosomeInputProps,
+  type RibosomeListProps,
+  type RibosomeSelectProps,
+  type RibosomeStatProps,
   type RibosomeSubmittableProps,
   type RibosomeTextProps,
 } from "../../dist/index.js";
@@ -144,6 +150,59 @@ const Submittable = ({ id, value, on_submit }: RibosomeSubmittableProps) => (
 
 const Image = ({ src, alt }: RibosomeImageProps) => <img src={src} alt={alt} />;
 
+const Button = ({ id, label, action, disabled }: RibosomeButtonProps) => (
+  <button
+    id={id}
+    type={action === "Submit" ? "submit" : "button"}
+    disabled={disabled}
+    onClick={() => {
+      if (typeof action === "string" && action.startsWith("Navigate:")) {
+        window.location.href = action.slice("Navigate:".length);
+      }
+    }}
+  >
+    {label}
+  </button>
+);
+
+const Select = ({ id, label, options, selected }: RibosomeSelectProps) => (
+  <label htmlFor={id}>
+    {label}
+    <select id={id} name={id} defaultValue={selected ?? ""}>
+      {!selected && <option value="">Select...</option>}
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  </label>
+);
+
+const Badge = ({ id, label, variant }: RibosomeBadgeProps) => (
+  <span id={id} data-variant={variant}>
+    {label}
+  </span>
+);
+
+const List = ({ id, ordered, children }: RibosomeListProps) => {
+  const Tag = ordered ? "ol" : "ul";
+
+  return <Tag id={id}>{children}</Tag>;
+};
+
+const Stat = ({ id, label, value, secondary }: RibosomeStatProps) => (
+  <dl id={id}>
+    <dt>{label}</dt>
+    <dd>{value}</dd>
+    {secondary && <dd>{secondary}</dd>}
+  </dl>
+);
+
+const Divider = ({ id, label }: RibosomeDividerProps) => (
+  <hr id={id} aria-label={label} />
+);
+
 const Text = ({ text_type, value }: RibosomeTextProps) => {
   if (text_type === "H1") return <h1>{value}</h1>;
   if (text_type === "H2") return <h2>{value}</h2>;
@@ -162,6 +221,12 @@ const components = {
   submittable: Submittable,
   image: Image,
   text: Text,
+  button: Button,
+  select: Select,
+  badge: Badge,
+  list: List,
+  stat: Stat,
+  divider: Divider,
 } satisfies Required<RibosomeConfig["components"]>;
 
 const formFieldStyle = {
