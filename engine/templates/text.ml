@@ -21,7 +21,7 @@ let string_of_text_type = function
   | H5 -> "H5"
   | H6 -> "H6"
 
-let text_type_of_json json =
+let deserialise_text_type json =
   match Js.Json.decodeString json with
   | Some value -> text_type_of_string value
   | None ->
@@ -30,7 +30,7 @@ let text_type_of_json json =
       text_type_of_string (string_of_json arr.(0))
     | _ -> failwith "expected text_type string"
 
-let text_type_to_json value = string_to_json (string_of_text_type value)
+let serialise_text_type value = string_to_json (string_of_text_type value)
 
 type t = {
   kind: string;
@@ -39,25 +39,25 @@ type t = {
   content: string
 }
 
-let of_json json =
+let deserialise json =
   let open Melange_json.Of_json in
   {
     kind = field "kind" string json;
     id = field "id" string json;
-    text_type = field "text_type" text_type_of_json json;
+    text_type = field "text_type" deserialise_text_type json;
     content =
       match Helpers.optional_field "value" string json with
       | Some value -> value
       | None -> field "content" string json;
   }
 
-let to_json text =
-  Js.Json.object_ (Js.Dict.fromArray [|
+let serialise text =
+  Js.Json.object_ (Js.Dict.fromList [
     ("kind", string_to_json text.kind);
     ("id", string_to_json text.id);
-    ("text_type", text_type_to_json text.text_type);
+    ("text_type", serialise_text_type text.text_type);
     ("value", string_to_json text.content);
-  |])
+  ])
 
 let definition : TemplateDefinitionTypes.template_definition =
   let open TemplateDefinitionTypes in

@@ -1,4 +1,4 @@
-(* TODO: revise low quality AI code *)
+open Melange_json.Primitives
 
 type t = {
   kind: string;
@@ -8,7 +8,7 @@ type t = {
   secondary: string option;
 }
 
-let of_json json =
+let deserialise json =
   let open Melange_json.Of_json in
   {
     kind = field "kind" string json;
@@ -17,6 +17,21 @@ let of_json json =
     value = field "value" string json;
     secondary = Helpers.optional_field "secondary" string json;
   }
+
+let serialise (stat: t) =
+  let base = [
+    ("kind", string_to_json stat.kind);
+    ("id", string_to_json stat.id);
+    ("label", string_to_json stat.label);
+    ("value", string_to_json stat.value);
+  ] in
+  let fields =
+    match stat.secondary with
+    | Some secondary -> base @ [("secondary", string_to_json secondary)]
+    | None -> base
+  in
+  Js.Json.object_ (Js.Dict.fromList fields)
+
 
 let definition : TemplateDefinitionTypes.template_definition =
   let open TemplateDefinitionTypes in

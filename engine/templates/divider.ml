@@ -1,17 +1,31 @@
-(* TODO: revise low quality AI code *)
+open Melange_json.Primitives
+
 type t = {
   kind: string;
   id: string;
   label: string option;
 }
 
-let of_json json =
+let deserialise json =
   let open Melange_json.Of_json in
   {
     kind = field "kind" string json;
     id = field "id" string json;
     label = Helpers.optional_field "label" string json;
   }
+
+let serialise (divider: t) =
+  let base = [
+    ("kind", string_to_json divider.kind);
+    ("id", string_to_json divider.id);
+  ] in
+  let fields =
+    match divider.label with
+    | Some label -> base @ [("label", string_to_json label)]
+    | None -> base
+  in
+  Js.Json.object_ (Js.Dict.fromList fields)
+
 
 let definition : TemplateDefinitionTypes.template_definition =
   let open TemplateDefinitionTypes in

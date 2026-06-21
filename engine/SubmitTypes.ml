@@ -11,8 +11,13 @@ type submission_payload = {
   values: submitted_input list;
 } [@@deriving json]
 
-type user_turn = {
-  tree_snapshot: string;
-  user_input: submission_payload;
-}
+(* 
+  TREE Parser
+  1. walk, tree, and serialise using existing serialise functions.
+  2. if you encounter the input node that matches the one of the lists in the input
+  then include the user response 
+*)
 
+let serialise_tree_state (_template: Types.template) (_input: submitted_input list) =
+  (* TODO: implement recursive tree walk with value injection *)
+  Js.Json.string "TODO"

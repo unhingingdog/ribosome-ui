@@ -4,14 +4,14 @@ type field =
   | FieldInput of Input.t
   | FieldSelect of Select.t
 
-let field_of_json json =
+let deserialise_field json =
   match Melange_json.Of_json.(field "kind" string json) with
-  | "select" -> FieldSelect (Select.of_json json)
-  | _ -> FieldInput (Input.of_json json)
+  | "select" -> FieldSelect (Select.deserialise json)
+  | _ -> FieldInput (Input.deserialise json)
 
-let field_to_json = function
-  | FieldInput input -> Input.to_json input
-  | FieldSelect select -> Select.to_json select
+let serialise_field = function
+  | FieldInput input -> Input.serialise input
+  | FieldSelect select -> Select.serialise select select.selected
 
 type t = {
   kind: string;
@@ -19,20 +19,20 @@ type t = {
   value: field list;
 }
 
-let of_json json =
+let deserialise json =
   let open Melange_json.Of_json in
   {
     kind = field "kind" string json;
     id = field "id" string json;
-    value = field "value" (list field_of_json) json;
+    value = field "value" (list deserialise_field) json;
   }
 
-let to_json (submittable: t) =
-  Js.Json.object_ (Js.Dict.fromArray [|
+let serialise (submittable: t) =
+  Js.Json.object_ (Js.Dict.fromList [
     ("kind", string_to_json submittable.kind);
     ("id", string_to_json submittable.id);
-    ("value", list_to_json field_to_json submittable.value);
-  |])
+    ("value", list_to_json serialise_field submittable.value);
+  ])
 
 let definition : TemplateDefinitionTypes.template_definition =
   let open TemplateDefinitionTypes in

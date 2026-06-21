@@ -101,17 +101,14 @@ describe("Parser", () => {
     expect(result).toBeDefined();
   });
 
-  it("still parses legacy tagged variant JSON", () => {
+  it("rejects legacy tagged input value JSON", () => {
     const result = unwrap(parse_data(JSON.stringify({
-      kind: "container",
-      id: "legacyContainer",
-      children: [
-        { kind: "text", id: "legacyText", text_type: ["H1"], content: "Hello" },
-        { kind: "input", id: "legacyInput", value: ["String", "Ada"] },
-      ],
+      kind: "input",
+      id: "legacyInput",
+      value: ["String", "Ada"],
     })));
 
-    expect(result).toBeDefined();
+    expect(result).toBeUndefined();
   });
 
   it("returns undefined for container with corrupt children field", () => {

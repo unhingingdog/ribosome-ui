@@ -16,24 +16,24 @@ type template_definition = TemplateDefinitionTypes.template_definition = {
 
 type input_value = Templates.Input.input_value = Int of int | String of string
 
-let input_value_of_json = Templates.Input.input_value_of_json
-let input_value_to_json = Templates.Input.input_value_to_json
+let deserialise_input_value = Templates.Input.deserialise_input_value
+let serialise_input_value = Templates.Input.serialise_input_value
 
 type input = Templates.Input.t = {
   kind: string;
   id: string;
-  value: input_value
+  value: input_value option
 }
 
-let input_of_json = Templates.Input.of_json
-let input_to_json = Templates.Input.to_json
+let deserialise_input = Templates.Input.deserialise
+let serialise_input = Templates.Input.serialise
 
 type submittable_field = Templates.Submittable.field =
   | FieldInput of input
   | FieldSelect of Templates.Select.t
 
-let submittable_field_of_json = Templates.Submittable.field_of_json
-let submittable_field_to_json = Templates.Submittable.field_to_json
+let deserialise_submittable_field = Templates.Submittable.deserialise_field
+let serialise_submittable_field = Templates.Submittable.serialise_field
 
 type submittable = Templates.Submittable.t = {
   kind: string;
@@ -41,8 +41,8 @@ type submittable = Templates.Submittable.t = {
   value: submittable_field list;
 }
 
-let submittable_of_json = Templates.Submittable.of_json
-let submittable_to_json = Templates.Submittable.to_json
+let deserialise_submittable = Templates.Submittable.deserialise
+let serialise_submittable = Templates.Submittable.serialise
 
 type image = Templates.Image.t = {
   kind: string;
@@ -51,15 +51,15 @@ type image = Templates.Image.t = {
   alt: string;
 }
 
-let image_of_json = Templates.Image.of_json
-let image_to_json = Templates.Image.to_json
+let deserialise_image = Templates.Image.deserialise
+let serialise_image = Templates.Image.serialise
 
 type text_type = Templates.Text.text_type = Paragraph | H1 | H2 | H3 | H4 | H5 | H6
 
 let text_type_of_string = Templates.Text.text_type_of_string
 let string_of_text_type = Templates.Text.string_of_text_type
-let text_type_of_json = Templates.Text.text_type_of_json
-let text_type_to_json = Templates.Text.text_type_to_json
+let deserialise_text_type = Templates.Text.deserialise_text_type
+let serialise_text_type = Templates.Text.serialise_text_type
 
 type text = Templates.Text.t = {
   kind: string;
@@ -68,22 +68,22 @@ type text = Templates.Text.t = {
   content: string
 }
 
-let text_of_json = Templates.Text.of_json
-let text_to_json = Templates.Text.to_json
+let deserialise_text = Templates.Text.deserialise
+let serialise_text = Templates.Text.serialise
 
 type broken = Templates.Broken.t =
   | Soft  of string
   | Hard of string
 
-let broken_of_json = Templates.Broken.of_json
-let broken_to_json = Templates.Broken.to_json
+let deserialise_broken = Templates.Broken.deserialise
+let serialise_broken = Templates.Broken.serialise
 
 type button_action = Templates.Button.action =
   | Navigate of string
   | Submit
   | Custom of string
 
-let button_action_of_json = Templates.Button.action_of_json
+let deserialise_button_action = Templates.Button.deserialise_action
 
 type button = Templates.Button.t = {
   kind: string;
@@ -93,7 +93,7 @@ type button = Templates.Button.t = {
   disabled: bool option;
 }
 
-let button_of_json = Templates.Button.of_json
+let deserialise_button = Templates.Button.deserialise
 
 type select_option = Templates.Select.option_ = {
   value: string;
@@ -108,12 +108,12 @@ type select = Templates.Select.t = {
   selected: string option;
 }
 
-let select_of_json = Templates.Select.of_json
+let deserialise_select = Templates.Select.deserialise
 
 type badge_variant = Templates.Badge.badge_variant = Neutral | Success | Warning | Error | Info
 
 let badge_variant_of_string = Templates.Badge.badge_variant_of_string
-let badge_variant_of_json = Templates.Badge.badge_variant_of_json
+let deserialise_badge_variant = Templates.Badge.deserialise_badge_variant
 
 type badge = Templates.Badge.t = {
   kind: string;
@@ -122,7 +122,7 @@ type badge = Templates.Badge.t = {
   variant: badge_variant;
 }
 
-let badge_of_json = Templates.Badge.of_json
+let deserialise_badge = Templates.Badge.deserialise
 
 type stat = Templates.Stat.t = {
   kind: string;
@@ -132,7 +132,7 @@ type stat = Templates.Stat.t = {
   secondary: string option;
 }
 
-let stat_of_json = Templates.Stat.of_json
+let deserialise_stat = Templates.Stat.deserialise
 
 type divider = Templates.Divider.t = {
   kind: string;
@@ -140,7 +140,7 @@ type divider = Templates.Divider.t = {
   label: string option;
 }
 
-let divider_of_json = Templates.Divider.of_json
+let deserialise_divider = Templates.Divider.deserialise
 
 type container = template Templates.Container.t and template_list = template Templates.List.t and template =
   | Input of input
@@ -156,5 +156,5 @@ type container = template Templates.Container.t and template_list = template Tem
   | Stat of stat
   | Divider of divider
 
-let container_of_json = Templates.Container.of_json
-let template_list_of_json = Templates.List.of_json
+let deserialise_container = Templates.Container.deserialise
+let deserialise_template_list = Templates.List.deserialise

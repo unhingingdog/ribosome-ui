@@ -1,4 +1,4 @@
-(* TODO: revise low quality AI code *)
+open Melange_json.Primitives
 
 type 'template t = {
   kind: string;
@@ -6,13 +6,22 @@ type 'template t = {
   children: 'template list
 }
 
-let of_json json =
+let deserialise json =
   let open Melange_json.Of_json in
   {
     kind = field "kind" string json;
     id = field "id" string json;
     children = [];
   }
+
+let serialise template child_serialiser =
+  let serialised_children = list_to_json child_serialiser template.children in
+  Js.Json.object_ (Js.Dict.fromList [
+    ("kind", string_to_json template.kind); 
+    ("id", string_to_json template.id); 
+    ("children", serialised_children); 
+  ])
+
 
 let definition : TemplateDefinitionTypes.template_definition = {
   kind = "container";

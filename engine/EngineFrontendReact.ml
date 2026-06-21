@@ -7,8 +7,12 @@ type 'props component_match = ('props component * 'props)
 type submittable_props = {
   kind: string;
   id: string;
-  value: input list;
+  value: Templates.Submittable.field list;
   on_submit: SubmitTypes.submission_payload -> unit;
+}
+
+type broken_props = {
+  message: string;
 }
 
 type template_component = 
@@ -23,7 +27,7 @@ type template_component =
   | List of template_list component
   | Stat of stat component
   | Divider of divider component
-  | Broken of broken component 
+  | Broken of broken_props component 
 
 type component_registry = {
   input: input component option;
@@ -37,14 +41,14 @@ type component_registry = {
   list: template_list component option;
   stat: stat component option;
   divider: divider component option;
-  broken: string component;
+  broken: broken_props component;
 }
 
 let render component props = 
   React.createElement component props
 
 let broken_message component_type =
-  ("Used missing component: " ^ component_type)
+  { message = ("Used missing component: " ^ component_type) }
 
 let submittable_to_props (submittable: submittable) on_submit = {
   kind = submittable.kind;
@@ -114,11 +118,11 @@ let rec render_template_with_submit
       | Some c -> render c divider
       | None -> (render registry.broken (broken_message "divider")))
 
-    | Broken broken ->  
-      let c = registry .broken in
+| Broken broken ->  
+      let c = registry.broken in
       match broken with
-      | Soft message ->  render c message 
-      | Hard message -> render c message
+      | Soft message ->  render c { message } 
+      | Hard message -> render c { message }
 
 let render_template (template: template) (registry: component_registry) : element =
   render_template_with_submit template registry (fun _ -> ())

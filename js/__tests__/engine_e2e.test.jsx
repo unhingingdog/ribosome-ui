@@ -69,8 +69,8 @@ const chunks = {
   one: '{"kind":"container","id":"profile-container","children":[{"kind"',
   two: ':"text","id":"profile-heading","text_type":["H1"],"content":"Profile"',
   three:
-    ',"content":"Profile setup"},{"kind":"submittable","id":"profile-form","value":[{"kind":"input","id":"name","value":["String",""]}',
-  four: ',{"kind":"input","id":"color","value":["String",""]}]}',
+    ',"content":"Profile setup"},{"kind":"submittable","id":"profile-form","value":[{"kind":"input","id":"name","value":""}',
+  four: ',{"kind":"input","id":"color","value":""}]',
 };
 
 const firstTurnJson = chunks.one + chunks.two + chunks.three + chunks.four;

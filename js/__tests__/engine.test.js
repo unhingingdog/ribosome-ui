@@ -91,7 +91,7 @@ const submittableJson = (id, inputId) =>
       {
         kind: "input",
         id: inputId,
-        value: ["String", ""],
+        value: "",
       },
     ],
   });
