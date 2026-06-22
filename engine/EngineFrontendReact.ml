@@ -4,107 +4,89 @@ open Types
 type 'props component = 'props -> element
 type 'props component_match = ('props component * 'props)
 
-type submittable_props = {
-  kind: string;
-  id: string;
-  value: Templates.Submittable.field list;
-  button: button option;
-  on_submit: SubmitTypes.submission_payload -> unit;
-}
+module Keyable = FrontendKeyable.Keyable
 
-type broken_props = {
-  message: string;
-}
-
-type template_component = 
-  | Submittable of submittable_props component
-  | Image of image component
-  | Text of text component
-  | Container of container component
-  | Badge of badge component
-  | List of template_list component
-  | Stat of stat component
-  | Divider of divider component
-  | Broken of broken_props component 
+type template_component =
+  | Submittable of Keyable.keyed_submittable component
+  | Image of Keyable.keyed_image component
+  | Text of Keyable.keyed_text component
+  | Container of Keyable.keyed_container component
+  | Badge of Keyable.keyed_badge component
+  | List of Keyable.keyed_list component
+  | Stat of Keyable.keyed_stat component
+  | Divider of Keyable.keyed_divider component
+  | Broken of Keyable.keyed_broken component
 
 type component_registry = {
-  submittable: submittable_props component option;
-  image: image component option;
-  text: text component option;
-  container: container component;
+  submittable: Keyable.keyed_submittable component option;
+  image: Keyable.keyed_image component option;
+  text: Keyable.keyed_text component option;
+  container: Keyable.keyed_container component;
   button: button component option;
-  badge: badge component option;
-  list: template_list component option;
-  stat: stat component option;
-  divider: divider component option;
-  broken: broken_props component;
+  badge: Keyable.keyed_badge component option;
+  list: Keyable.keyed_list component option;
+  stat: Keyable.keyed_stat component option;
+  divider: Keyable.keyed_divider component option;
+  broken: Keyable.keyed_broken component;
 }
 
-let render component props = 
+let render component props =
   React.createElement component props
 
 let broken_message component_type =
-  { message = ("Used missing component: " ^ component_type) }
-
-let submittable_to_props (submittable: submittable) on_submit = {
-  kind = submittable.kind;
-  id = submittable.id;
-  value = submittable.value;
-  button = submittable.button;
-  on_submit;
-}
+  { Keyable.key = "broken"; message = ("Used missing component: " ^ component_type) }
 
 let rec render_template_with_submit
   (template: template)
   (registry: component_registry)
   (on_submit: SubmitTypes.submission_payload -> unit)
   : element =
-  match template with 
-    | Container container -> 
+  match template with
+    | Container container ->
         let children = List.map (fun sub_template -> render_template_with_submit sub_template registry on_submit) container.children in
-        React.createElementVariadic registry.container container (Array.of_list children)
+        React.createElementVariadic registry.container (FrontendKeyable.container_to_keyed container) (Array.of_list children)
 
     | List list ->
         let children = List.map (fun sub_template -> render_template_with_submit sub_template registry on_submit) list.children in
         (match registry.list with
-        | Some c -> React.createElementVariadic c list (Array.of_list children)
+        | Some c -> React.createElementVariadic c (FrontendKeyable.list_to_keyed list) (Array.of_list children)
         | None -> (render registry.broken (broken_message "list")))
 
-    | Submittable submittable ->  
+    | Submittable submittable ->
       (match registry.submittable with
-      | Some c ->  render c (submittable_to_props submittable on_submit)
+      | Some c ->  render c (FrontendKeyable.submittable_to_keyed submittable on_submit)
       | None -> (render registry.broken (broken_message "submittable")))
 
-    | Image image ->  
+    | Image image ->
       (match registry.image with
-      | Some c ->  render c image
+      | Some c ->  render c (FrontendKeyable.image_to_keyed image)
       | None -> (render registry.broken (broken_message "image")))
 
-    | Text text ->  
+    | Text text ->
       (match registry.text with
-      | Some c ->  render c text 
+      | Some c ->  render c (FrontendKeyable.text_to_keyed text)
       | None -> (render registry.broken (broken_message "text")))
 
     | Badge badge ->
       (match registry.badge with
-      | Some c -> render c badge
+      | Some c -> render c (FrontendKeyable.badge_to_keyed badge)
       | None -> (render registry.broken (broken_message "badge")))
 
     | Stat stat ->
       (match registry.stat with
-      | Some c -> render c stat
+      | Some c -> render c (FrontendKeyable.stat_to_keyed stat)
       | None -> (render registry.broken (broken_message "stat")))
 
     | Divider divider ->
       (match registry.divider with
-      | Some c -> render c divider
+      | Some c -> render c (FrontendKeyable.divider_to_keyed divider)
       | None -> (render registry.broken (broken_message "divider")))
 
-| Broken broken ->  
+    | Broken broken ->
       let c = registry.broken in
       match broken with
-      | Soft message ->  render c { message } 
-      | Hard message -> render c { message }
+      | Soft message ->  render c (FrontendKeyable.broken_to_keyed (Soft message))
+      | Hard message -> render c (FrontendKeyable.broken_to_keyed (Hard message))
 
 let render_template (template: template) (registry: component_registry) : element =
   render_template_with_submit template registry (fun _ -> ())

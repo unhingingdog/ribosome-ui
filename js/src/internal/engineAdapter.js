@@ -146,7 +146,7 @@ const submissionToInternal = (payload) => ({
 
 const brokenMessage = (props) => {
   if (typeof props === "string") return props;
-  return Object.values(props ?? {}).join("");
+  return props.message ?? Object.values(props ?? {}).join("");
 };
 
 const adaptComponents = (components) => ({
