@@ -1,5 +1,12 @@
 open EngineTypes
 
+let root_template =
+  Types.Container {
+    kind = "container";
+    id = "root";
+    children = [];
+  }
+
 type t = {
   config: config;
   renderer: (React.element -> unit) option;
@@ -17,7 +24,7 @@ let create_runtime config = {
   state = State.AnyState State.Idle;
   history = [];
   processor = EngineBackend.initial_processor_state;
-  last_template = None;
+  last_template = Some root_template;
   last_error = None;
   abort = None;
 }
@@ -40,7 +47,7 @@ let set_error t details =
 let reset_turn t =
   abort_in_flight t;
   t.processor <- EngineBackend.initial_processor_state;
-  t.last_template <- None;
+  t.last_template <- Some root_template;
   t.last_error <- None
 
 let rec render_template t template =
@@ -191,7 +198,10 @@ let reset t =
   abort_in_flight t;
   t.state <- State.AnyState State.Idle;
   t.history <- [];
-  reset_turn t
+  t.last_template <- Some root_template;
+  t.processor <- EngineBackend.initial_processor_state;
+  t.last_error <- None;
+  t.abort <- None
 
 let create config =
   let t = create_runtime config in

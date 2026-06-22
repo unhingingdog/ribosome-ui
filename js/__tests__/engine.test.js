@@ -138,7 +138,7 @@ describe("Engine runtime utilities", () => {
     reset_turn(t);
 
     expect(listToArray(t.history)).toEqual([{ role: 0, content: "kept" }]);
-    expect(t.last_template).toBeUndefined();
+    expect(t.last_template).toMatchObject({ TAG: 3, _0: { id: "root", kind: "container" } });
     expect(t.last_error).toBeUndefined();
   });
 
