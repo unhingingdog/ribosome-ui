@@ -138,7 +138,7 @@ describe("Engine runtime utilities", () => {
     reset_turn(t);
 
     expect(listToArray(t.history)).toEqual([{ role: 0, content: "kept" }]);
-    expect(t.last_template).toMatchObject({ TAG: 3, _0: { id: "root", kind: "container" } });
+    expect(t.last_template).toMatchObject({ TAG: 3, _0: { id: "text" } });
     expect(t.last_error).toBeUndefined();
   });
 
@@ -146,7 +146,7 @@ describe("Engine runtime utilities", () => {
     unresolvedFetch();
     const t = createRuntime();
 
-    run_turn(t, "user submitted data", "current interaction");
+    run_turn(t, "user submitted data");
 
     expect(listToArray(t.history)).toMatchObject([
       { role: 0, content: "user submitted data" },
@@ -158,7 +158,7 @@ describe("Engine runtime utilities", () => {
     );
   });
 
-  it("processes a streamed template and completes assistant history", () => {
+  it("processes a streamed template and completes", () => {
     unresolvedFetch();
     const t = createRuntime();
     const templateJson =
@@ -171,7 +171,6 @@ describe("Engine runtime utilities", () => {
     expect(t.last_template).toMatchObject({ TAG: 2, _0: { id: "intro" } });
     expect(listToArray(t.history)).toMatchObject([
       { role: 0, content: "Render the first UI" },
-      { role: 1, content: templateJson },
     ]);
     expect(t.config.callbacks.on_message_complete).toHaveBeenCalledWith(t.last_template);
   });
@@ -219,11 +218,8 @@ describe("Engine runtime utilities", () => {
     expect(t.config.callbacks.on_error).not.toHaveBeenCalled();
     expect(listToArray(t.history)).toMatchObject([
       { role: 0, content: "Render the first UI" },
-      { role: 1, content: firstTemplate },
       { role: 0 },
-      { role: 1, content: secondTemplate },
       { role: 0 },
-      { role: 1, content: finalTemplate },
     ]);
   });
 
@@ -269,7 +265,6 @@ describe("Engine runtime utilities", () => {
     expect(t.config.callbacks.on_message_complete).toHaveBeenCalledTimes(1);
     expect(listToArray(t.history)).toMatchObject([
       { role: 0, content: "Render the first UI" },
-      { role: 1, content: firstTemplate },
       { role: 0 },
     ]);
   });

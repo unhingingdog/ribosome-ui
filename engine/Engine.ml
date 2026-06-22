@@ -47,7 +47,6 @@ let set_error t details =
 let reset_turn t =
   abort_in_flight t;
   t.processor <- EngineBackend.initial_processor_state;
-  t.last_template <- Some root_template;
   t.last_error <- None
 
 let rec render_template t template =
@@ -107,14 +106,9 @@ and on_done t = function
         set_error t message
       | Ok state ->
         t.state <- state;
-        (match t.last_template with
-        | None -> ()
-        | Some _ ->
-          (* TODO: Consider processing or compacting assistant history for prompt quality. *)
-          t.history <- t.history @ [{ role = Bot; content = t.processor.buffer }]);
         t.config.callbacks.on_message_complete t.last_template)
 
-and run_turn t ~user_message ~interaction_goal =
+and run_turn t user_message =
   reset_turn t;
   Utils.Log.debug "[ribosome engine] run_turn user_message" user_message;
   t.history <- t.history @ [{ role = User; content = user_message }];
@@ -124,8 +118,8 @@ and run_turn t ~user_message ~interaction_goal =
         t.config.templates
         t.config.assets
         t.config.goal_prompt
-        interaction_goal;
-    messages = t.history;
+        None;
+    messages = [{ role = User; content = user_message }];
   } in
   let request = t.config.request context in
   Utils.Log.debug "[ribosome engine] request url" request.url;
@@ -156,7 +150,7 @@ and kick_off t =
     set_error t message
   | Ok state ->
     t.state <- state;
-    run_turn t ~user_message:t.config.goal_prompt ~interaction_goal:None
+    run_turn t t.config.goal_prompt
 
 and recover_if_errored t =
   match t.last_error with
@@ -170,18 +164,23 @@ and submit t payload =
   Utils.Log.debug "[ribosome engine] submit payload template_id" payload.SubmitTypes.template_id;
   recover_if_errored t;
   t.config.callbacks.on_submit payload;
-  let interaction_goal =
-    payload
-    |> SubmitTypes.submission_payload_to_json
-    |> Melange_json.to_string
+  let user_message =
+    match t.last_template with
+    | None ->
+      SubmitTypes.serialise_template root_template
+      |> Melange_json.to_string
+    | Some template ->
+      let template_with_input = SubmitTypes.inject_user_input template payload.SubmitTypes.values in
+      SubmitTypes.serialise_template template_with_input
+      |> Melange_json.to_string
   in
-  Utils.Log.debug "[ribosome engine] submit serialized interaction_goal" interaction_goal;
+  Utils.Log.debug "[ribosome engine] submit serialized tree" user_message;
   let prompt =
     Prompt.create_llm_prompt
       t.config.templates
       t.config.assets
       t.config.goal_prompt
-      (Some interaction_goal)
+      None
   in
   match State.kick_off t.state ~prompt with
   | Error message ->
@@ -189,10 +188,7 @@ and submit t payload =
     set_error t message
   | Ok state ->
     t.state <- state;
-    run_turn
-      t
-      ~user_message:interaction_goal
-      ~interaction_goal:(Some interaction_goal)
+    run_turn t user_message
 
 let reset t =
   abort_in_flight t;

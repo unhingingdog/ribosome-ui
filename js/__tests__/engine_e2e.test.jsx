@@ -204,16 +204,22 @@ describe.sequential("Engine end-to-end React streaming flow", () => {
     const secondFetchBody = JSON.parse(fetch.mock.calls[1][1].body);
     const submittedMessage = JSON.parse(secondFetchBody.messages.at(-1).content);
 
-    expect(submittedMessage).toEqual({
-      template_id: "profile-form",
-      values: [
-        { id: "name", value: ["SubmittedString", "Ada"] },
-        { id: "color", value: ["SubmittedString", "blue"] },
+    expect(submittedMessage).toMatchObject({
+      kind: "container",
+      id: "profile-container",
+      children: [
+        { kind: "text", id: "profile-heading", value: "Profile setup" },
+        {
+          kind: "submittable",
+          id: "profile-form",
+          value: [
+            { kind: "input", id: "name", value: "Ada" },
+            { kind: "input", id: "color", value: "blue" },
+          ],
+        },
       ],
     });
     expect(secondFetchBody.messages).toMatchObject([
-      { role: 0, content: "Collect profile details" },
-      { role: 1, content: firstTurnJson },
       { role: 0 },
     ]);
     expect(callbacks.on_submit).toHaveBeenCalledTimes(1);
