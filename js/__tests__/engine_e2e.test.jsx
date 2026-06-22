@@ -76,7 +76,6 @@ const chunks = {
 const firstTurnJson = chunks.one + chunks.two + chunks.three + chunks.four;
 
 const components = {
-  input: undefined,
   image: undefined,
   container: ({ children }) => <section>{children}</section>,
   broken: ({ children }) => <div role="alert">{children}</div>,

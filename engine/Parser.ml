@@ -12,17 +12,15 @@ let parse_template json =
   try 
   debug "[ribosome parsing] parse_template kind" (field "kind" string json);
   match field "kind" string json with
-  | "image" -> catch (fun () -> Image (deserialise_image json))
-  | "text" -> catch (fun () -> Text (deserialise_text json))
-  | "input" -> catch (fun () -> Input (deserialise_input json))
-  | "submittable" -> catch (fun () -> Submittable (deserialise_submittable json))
-  | "container" -> catch (fun () -> Container (deserialise_container json))
-  | "button" -> catch (fun () -> Button (deserialise_button json))
-  | "select" -> catch (fun () -> Select (deserialise_select json))
-  | "badge" -> catch (fun () -> Badge (deserialise_badge json))
-  | "list" -> catch (fun () -> List (deserialise_template_list json))
-  | "stat" -> catch (fun () -> Stat (deserialise_stat json))
-  | "divider" -> catch (fun () -> Divider (deserialise_divider json))
+  | "image" -> catch (fun () -> Image (Templates.Image.deserialise json))
+  | "text" -> catch (fun () -> Text (Templates.Text.deserialise json))
+  | "submittable" -> catch (fun () -> Submittable (Templates.Submittable.deserialise json))
+  | "container" -> catch (fun () -> Container (Templates.Container.deserialise json))
+  | "button" -> catch (fun () -> Button (Templates.Button.deserialise json))
+  | "badge" -> catch (fun () -> Badge (Templates.Badge.deserialise json))
+  | "list" -> catch (fun () -> List (Templates.List.deserialise json))
+  | "stat" -> catch (fun () -> Stat (Templates.Stat.deserialise json))
+  | "divider" -> catch (fun () -> Divider (Templates.Divider.deserialise json))
   | kind -> 
     debug "[ribosome parsing] Soft failure - Unknown template kind" kind;
     Broken (Soft "Unknown template")

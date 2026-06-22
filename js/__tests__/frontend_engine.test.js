@@ -9,7 +9,7 @@ const list = (items) =>
   items.reduceRight((tl, hd) => ({ hd, tl }), 0);
 
 const textTemplate = (content, id = "text") => ({
-  TAG: 3,
+  TAG: 2,
   _0: {
     kind: "text",
     id,
@@ -19,7 +19,7 @@ const textTemplate = (content, id = "text") => ({
 });
 
 const imageTemplate = (id = "image") => ({
-  TAG: 2,
+  TAG: 1,
   _0: {
     kind: "image",
     id,
@@ -29,7 +29,7 @@ const imageTemplate = (id = "image") => ({
 });
 
 const containerTemplate = (children, id = "container") => ({
-  TAG: 4,
+  TAG: 3,
   _0: {
     kind: "container",
     id,
@@ -44,7 +44,7 @@ const input = (id, value = "") => ({
 });
 
 const submittableTemplate = (id = "form") => ({
-  TAG: 1,
+  TAG: 0,
   _0: {
     kind: "submittable",
     id,
@@ -61,7 +61,6 @@ const Broken = ({ message }) => {
 };
 
 const registry = (components = {}) => ({
-  input: undefined,
   submittable: undefined,
   image: Image,
   text: Text,

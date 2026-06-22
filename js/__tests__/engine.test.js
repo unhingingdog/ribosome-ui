@@ -168,7 +168,7 @@ describe("Engine runtime utilities", () => {
     on_chunk(t, templateJson);
     on_done(t, 0);
 
-    expect(t.last_template).toMatchObject({ TAG: 3, _0: { id: "intro" } });
+    expect(t.last_template).toMatchObject({ TAG: 2, _0: { id: "intro" } });
     expect(listToArray(t.history)).toMatchObject([
       { role: 0, content: "Render the first UI" },
       { role: 1, content: templateJson },
@@ -183,7 +183,6 @@ describe("Engine runtime utilities", () => {
     const Text = () => null;
     const t = createRuntime({
       components: {
-        input: undefined,
         submittable: Submittable,
         image: undefined,
         text: Text,
@@ -243,7 +242,6 @@ describe("Engine runtime utilities", () => {
 
     const t = createRuntime({
       components: {
-        input: undefined,
         submittable: Submittable,
         image: undefined,
         text: () => null,

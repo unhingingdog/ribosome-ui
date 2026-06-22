@@ -5,7 +5,7 @@ import { parse_data } from "../output/engine/Parser.js";
 const unwrap = (result) => {
   if (result?.TAG === 1) return undefined; // Error
   const value = result?._0;
-  if (value?.TAG === 5) return undefined; // Broken (Soft or Hard)
+  if (value?.TAG === 4) return undefined; // Broken (Soft or Hard)
   return value;
 };
 

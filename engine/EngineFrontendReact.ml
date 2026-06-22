@@ -16,13 +16,11 @@ type broken_props = {
 }
 
 type template_component = 
-  | Input of input component
   | Submittable of submittable_props component
   | Image of image component
   | Text of text component
   | Container of container component
   | Button of button component
-  | Select of select component
   | Badge of badge component
   | List of template_list component
   | Stat of stat component
@@ -30,13 +28,11 @@ type template_component =
   | Broken of broken_props component 
 
 type component_registry = {
-  input: input component option;
   submittable: submittable_props component option;
   image: image component option;
   text: text component option;
   container: container component;
   button: button component option;
-  select: select component option;
   badge: badge component option;
   list: template_list component option;
   stat: stat component option;
@@ -73,11 +69,6 @@ let rec render_template_with_submit
         | Some c -> React.createElementVariadic c list (Array.of_list children)
         | None -> (render registry.broken (broken_message "list")))
 
-    | Input input ->  
-      (match registry.input with
-      | Some c ->  render c input
-      | None -> (render registry.broken (broken_message "input")))
-
     | Submittable submittable ->  
       (match registry.submittable with
       | Some c ->  render c (submittable_to_props submittable on_submit)
@@ -97,11 +88,6 @@ let rec render_template_with_submit
       (match registry.button with
       | Some c -> render c button
       | None -> (render registry.broken (broken_message "button")))
-
-    | Select select ->
-      (match registry.select with
-      | Some c -> render c select
-      | None -> (render registry.broken (broken_message "select")))
 
     | Badge badge ->
       (match registry.badge with

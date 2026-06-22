@@ -18,6 +18,6 @@ describe("EngineBackend streaming", () => {
     const second = handle_chunk(',"value":"Hello streaming"', processor);
 
     expect(second.TAG).toBe(1); // Parsed
-    expect(second._0[0].TAG).toBe(4); // Container
+    expect(second._0[0].TAG).toBe(3); // Container
   });
 });
