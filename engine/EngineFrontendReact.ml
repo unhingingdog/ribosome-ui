@@ -8,6 +8,7 @@ type submittable_props = {
   kind: string;
   id: string;
   value: Templates.Submittable.field list;
+  button: button option;
   on_submit: SubmitTypes.submission_payload -> unit;
 }
 
@@ -20,7 +21,6 @@ type template_component =
   | Image of image component
   | Text of text component
   | Container of container component
-  | Button of button component
   | Badge of badge component
   | List of template_list component
   | Stat of stat component
@@ -50,6 +50,7 @@ let submittable_to_props (submittable: submittable) on_submit = {
   kind = submittable.kind;
   id = submittable.id;
   value = submittable.value;
+  button = submittable.button;
   on_submit;
 }
 
@@ -83,11 +84,6 @@ let rec render_template_with_submit
       (match registry.text with
       | Some c ->  render c text 
       | None -> (render registry.broken (broken_message "text")))
-
-    | Button button ->
-      (match registry.button with
-      | Some c -> render c button
-      | None -> (render registry.broken (broken_message "button")))
 
     | Badge badge ->
       (match registry.badge with

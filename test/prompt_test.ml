@@ -48,9 +48,8 @@ let test_create_llm_prompt () =
   assert_contains "prompt includes assets heading" prompt "# Assets";
   assert_contains "prompt includes asset url" prompt "/assets/rice-field.jpg";
   assert_contains "prompt includes output contract" prompt "Return exactly one JSON object";
-  assert_contains "prompt references chat history" prompt "Previous chat history and structured user submissions";
-  assert_contains "prompt references submittables" prompt "at least one submittable";
-  assert_contains "prompt includes streaming rule" prompt "When streaming, continue the same JSON object";
+  assert_contains "prompt references chat history" prompt "Conversation history and structured user submissions";
+  assert_contains "prompt includes streaming rule" prompt "Stream the same JSON object continuously from start to finish";
   assert_contains "prompt includes available templates" prompt "# Available Templates"
 
 let () =

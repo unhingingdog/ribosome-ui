@@ -17,6 +17,7 @@ type t = {
   kind: string;
   id: string;
   value: field list;
+  button: Button.t option;
 }
 
 let deserialise json =
@@ -25,14 +26,20 @@ let deserialise json =
     kind = field "kind" string json;
     id = field "id" string json;
     value = field "value" (list deserialise_field) json;
+    button = Helpers.optional_field "button" Button.deserialise json;
   }
 
 let serialise (submittable: t) =
-  Js.Json.object_ (Js.Dict.fromList [
+  let base = [
     ("kind", string_to_json submittable.kind);
     ("id", string_to_json submittable.id);
     ("value", list_to_json serialise_field submittable.value);
-  ])
+  ] in
+  let fields = match submittable.button with
+    | Some button -> base @ [("button", Button.serialise button None)]
+    | None -> base
+  in
+  Js.Json.object_ (Js.Dict.fromList fields)
 
 let definition : TemplateDefinitionTypes.template_definition =
   let open TemplateDefinitionTypes in

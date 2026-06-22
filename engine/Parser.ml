@@ -16,7 +16,6 @@ let parse_template json =
   | "text" -> catch (fun () -> Text (Templates.Text.deserialise json))
   | "submittable" -> catch (fun () -> Submittable (Templates.Submittable.deserialise json))
   | "container" -> catch (fun () -> Container (Templates.Container.deserialise json))
-  | "button" -> catch (fun () -> Button (Templates.Button.deserialise json))
   | "badge" -> catch (fun () -> Badge (Templates.Badge.deserialise json))
   | "list" -> catch (fun () -> List (Templates.List.deserialise json))
   | "stat" -> catch (fun () -> Stat (Templates.Stat.deserialise json))

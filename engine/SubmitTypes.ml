@@ -50,7 +50,6 @@ let rec serialise_template (template: template) =
     | Stat data -> Templates.Stat.serialise data 
     | Divider data -> Templates.Divider.serialise data 
     | Broken data -> Templates.Broken.serialise data 
-    | Button data -> Templates.Button.serialise data None
     | Submittable data -> Templates.Submittable.serialise data
     | Container data -> Templates.Container.serialise data (fun child -> serialise_template child)
     | List data -> Templates.List.serialise data (fun child -> serialise_template child) 

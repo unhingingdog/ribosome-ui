@@ -22,16 +22,6 @@ type input = Templates.Input.t = {
   value: input_value option
 }
 
-type submittable_field = Templates.Submittable.field =
-  | FieldInput of input
-  | FieldSelect of Templates.Select.t
-
-type submittable = Templates.Submittable.t = {
-  kind: string;
-  id: string;
-  value: submittable_field list;
-}
-
 type image = Templates.Image.t = {
   kind: string;
   id: string;
@@ -55,12 +45,12 @@ type broken = Templates.Broken.t =
   | Soft  of string
   | Hard of string
 
-type button_action = Templates.Button.action =
+and button_action = Templates.Button.action =
   | Navigate of string
   | Submit
   | Custom of string
 
-type button = Templates.Button.t = {
+and button = Templates.Button.t = {
   kind: string;
   id: string;
   label: string;
@@ -68,12 +58,12 @@ type button = Templates.Button.t = {
   disabled: bool option;
 }
 
-type select_option = Templates.Select.option_ = {
+and select_option = Templates.Select.option_ = {
   value: string;
   label: string;
 }
 
-type select = Templates.Select.t = {
+and select = Templates.Select.t = {
   kind: string;
   id: string;
   label: string;
@@ -81,18 +71,16 @@ type select = Templates.Select.t = {
   selected: string option;
 }
 
-type badge_variant = Templates.Badge.badge_variant = Neutral | Success | Warning | Error | Info
+and badge_variant = Templates.Badge.badge_variant = Neutral | Success | Warning | Error | Info
 
-let badge_variant_of_string = Templates.Badge.badge_variant_of_string
-
-type badge = Templates.Badge.t = {
+and badge = Templates.Badge.t = {
   kind: string;
   id: string;
   label: string;
   variant: badge_variant;
 }
 
-type stat = Templates.Stat.t = {
+and stat = Templates.Stat.t = {
   kind: string;
   id: string;
   label: string;
@@ -100,20 +88,32 @@ type stat = Templates.Stat.t = {
   secondary: string option;
 }
 
-type divider = Templates.Divider.t = {
+and divider = Templates.Divider.t = {
   kind: string;
   id: string;
   label: string option;
 }
 
-type container = template Templates.Container.t and template_list = template Templates.List.t and template =
+and container = template Templates.Container.t and template_list = template Templates.List.t and template =
   | Submittable of submittable
   | Image of image
   | Text of text 
   | Container of container 
   | Broken of broken
-  | Button of button
   | Badge of badge
   | List of template_list
   | Stat of stat
   | Divider of divider
+
+and submittable_field = Templates.Submittable.field =
+  | FieldInput of input
+  | FieldSelect of Templates.Select.t
+
+and submittable = Templates.Submittable.t = {
+  kind: string;
+  id: string;
+  value: submittable_field list;
+  button: button option;
+}
+
+let badge_variant_of_string = Templates.Badge.badge_variant_of_string
