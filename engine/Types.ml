@@ -117,3 +117,14 @@ and submittable = Templates.Submittable.t = {
 }
 
 let badge_variant_of_string = Templates.Badge.badge_variant_of_string
+
+let id_of_template = function
+  | Submittable s -> s.id
+  | Image i -> i.id
+  | Text t -> t.id
+  | Container c -> c.id
+  | Broken _ -> ""
+  | Badge b -> b.id
+  | List l -> l.id
+  | Stat s -> s.id
+  | Divider d -> d.id
