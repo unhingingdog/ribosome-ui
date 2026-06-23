@@ -72,10 +72,17 @@ and on_delta t delta =
       Utils.Log.debug1 "[ribosome engine] backend pending";
       t.processor <- processor
     | EngineBackend.Telomere_result.Parsed (template, processor) ->
-      Utils.Log.debug1 "[ribosome engine] backend parsed, rendering";
+      Utils.Log.debug1 "[ribosome engine] backend parsed, reconciling";
       t.processor <- processor;
-      t.last_template <- Some template;
-      render_template t template
+      let existing = match t.last_template with Some x -> x | None -> root_template in
+      let reconciled = match Reconciler.reconcile existing template with
+        | Reconciler.Found t -> t
+        | Reconciler.NotFound _ ->
+          Utils.Log.debug1 "[ribosome engine] reconcile: patch id not found, replacing root";
+          template
+      in
+      t.last_template <- Some reconciled;
+      render_template t reconciled
     | EngineBackend.Telomere_result.Failed (message, processor) ->
       Utils.Log.debug "[ribosome engine] backend failed" message;
       t.processor <- processor;
