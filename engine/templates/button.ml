@@ -47,14 +47,12 @@ let definition : TemplateDefinitionTypes.template_definition =
   let open TemplateDefinitionTypes in
   {
     kind = "button";
-    intent = "Trigger a standalone action that does not collect data.";
-    instructions = "Use button for navigation, secondary actions, and \
-                    toggle-style interactions that do not require a form. \
-                    Do not use button as the submit control inside a \
-                    submittable — submittable has its own implicit submit. \
-                    Set action to Submit only when the button is the \
-                    primary call to action on a standalone screen with no \
-                    submittable.";
+    intent = "Trigger an action inside a submittable.";
+    instructions = "Use button ONLY inside a submittable template's button \
+                    field. Do NOT emit button as a standalone template. \
+                    A submittable can include one optional button for \
+                    secondary actions like navigation or toggles.";
+
     fields = [
       kind_field "button";
       id_field "button";

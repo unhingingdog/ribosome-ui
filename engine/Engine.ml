@@ -77,9 +77,7 @@ and on_delta t delta =
       let existing = match t.last_template with Some x -> x | None -> root_template in
       let reconciled = match Reconciler.reconcile existing template with
         | Reconciler.Found t -> t
-        | Reconciler.NotFound _ ->
-          Utils.Log.debug1 "[ribosome engine] reconcile: patch id not found, replacing root";
-          template
+        | Reconciler.NotFound _ -> template
       in
       t.last_template <- Some reconciled;
       render_template t reconciled
@@ -157,7 +155,19 @@ and kick_off t =
     set_error t message
   | Ok state ->
     t.state <- state;
-    run_turn t t.config.goal_prompt
+    let tree_json =
+      SubmitTypes.serialise_template root_template
+      |> Melange_json.to_string
+    in
+    let user_message =
+      String.concat "\n\n" [
+        Prompt.first_turn_user_instructions;
+        "Current tree:";
+        tree_json;
+      ]
+    in
+    Utils.Log.debug "[ribosome engine] kick_off user_message" user_message;
+    run_turn t user_message
 
 and recover_if_errored t =
   match t.last_error with
@@ -171,7 +181,7 @@ and submit t payload =
   Utils.Log.debug "[ribosome engine] submit payload template_id" payload.SubmitTypes.template_id;
   recover_if_errored t;
   t.config.callbacks.on_submit payload;
-  let user_message =
+  let tree_json =
     match t.last_template with
     | None ->
       SubmitTypes.serialise_template root_template
@@ -180,6 +190,13 @@ and submit t payload =
       let template_with_input = SubmitTypes.inject_user_input template payload.SubmitTypes.values in
       SubmitTypes.serialise_template template_with_input
       |> Melange_json.to_string
+  in
+  let user_message =
+    String.concat "\n\n" [
+      Prompt.later_turn_user_instructions;
+      "Current tree:";
+      tree_json;
+    ]
   in
   Utils.Log.debug "[ribosome engine] submit serialized tree" user_message;
   let prompt =

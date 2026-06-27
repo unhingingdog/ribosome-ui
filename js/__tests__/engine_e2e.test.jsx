@@ -20,6 +20,14 @@ const listToArray = (items) => {
   return result;
 };
 
+const extractTreeFromUserMessage = (content) => {
+  const parts = content.split("Current tree:");
+  if (parts.length >= 2) {
+    return parts[parts.length - 1].trim();
+  }
+  return content;
+};
+
 // submittable.value is a list of a field variant at the raw OCaml boundary:
 //   FieldInput  -> { TAG: 0, _0: input }
 //   FieldSelect -> { TAG: 1, _0: select }
@@ -202,7 +210,7 @@ describe.sequential("Engine end-to-end React streaming flow", () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
 
     const secondFetchBody = JSON.parse(fetch.mock.calls[1][1].body);
-    const submittedMessage = JSON.parse(secondFetchBody.messages.at(-1).content);
+    const submittedMessage = JSON.parse(extractTreeFromUserMessage(secondFetchBody.messages.at(-1).content));
 
     expect(submittedMessage).toMatchObject({
       kind: "container",
@@ -223,6 +231,140 @@ describe.sequential("Engine end-to-end React streaming flow", () => {
       { role: 0 },
     ]);
     expect(callbacks.on_submit).toHaveBeenCalledTimes(1);
+    expect(callbacks.on_error).not.toHaveBeenCalled();
+  });
+});
+
+describe.sequential("Engine partial patching flow", () => {
+  let stream1;
+  let stream2;
+  let callbacks;
+  let request;
+
+  beforeAll(() => {
+    document.body.innerHTML = '<div id="root"></div>';
+    stream1 = createControlledStream();
+    stream2 = createControlledStream();
+    callbacks = {
+      on_submit: vi.fn(),
+      on_message_complete: vi.fn(),
+      on_error: vi.fn(),
+    };
+    request = vi.fn((context) => ({
+      url: "/stream",
+      headers: [],
+      body: JSON.stringify({
+        system_prompt: context.system_prompt,
+        messages: listToArray(context.messages),
+      }),
+    }));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn()
+        .mockResolvedValueOnce(stream1.response)
+        .mockResolvedValueOnce(stream2.response)
+        .mockImplementationOnce(() => new Promise(() => {})),
+    );
+
+    const engine = create({
+      root: { TAG: 1, _0: "root" },
+      components,
+      templates: 0,
+      assets: 0,
+      goal_prompt: "Collect profile details",
+      request,
+      stream_adapter: (payload) => ({ TAG: 0, _0: payload }),
+      callbacks,
+    });
+    engine.start();
+  });
+
+  afterAll(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("first turn renders a scaffold with multiple regions", async () => {
+    const firstTurn = JSON.stringify({
+      kind: "container",
+      id: "root",
+      children: [
+        { kind: "text", id: "heading", text_type: "H1", content: "Profile" },
+        {
+          kind: "submittable",
+          id: "form",
+          value: [
+            { kind: "input", id: "name", value: "" },
+          ],
+        },
+        { kind: "text", id: "results", text_type: "Paragraph", content: "Submit to see results" },
+      ],
+    });
+
+    stream1.push(`data: ${firstTurn}\n`);
+    stream1.close();
+
+    await screen.findByRole("heading", { name: "Profile" });
+    await screen.findByRole("form", { name: "form" });
+    await screen.findByText("Submit to see results");
+    await waitFor(() => expect(callbacks.on_message_complete).toHaveBeenCalledTimes(1));
+  });
+
+  it("submitting the form sends the tree with user input values", async () => {
+    fireEvent.change(screen.getByLabelText("name"), { target: { value: "Ada" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save profile" }));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+
+    const secondFetchBody = JSON.parse(fetch.mock.calls[1][1].body);
+    const submittedMessage = JSON.parse(extractTreeFromUserMessage(secondFetchBody.messages.at(-1).content));
+
+    expect(submittedMessage).toMatchObject({
+      kind: "container",
+      id: "root",
+      children: [
+        { kind: "text", id: "heading", value: "Profile" },
+        {
+          kind: "submittable",
+          id: "form",
+          value: [
+            { kind: "input", id: "name", value: "Ada" },
+          ],
+        },
+        { kind: "text", id: "results", value: "Submit to see results" },
+      ],
+    });
+    expect(callbacks.on_submit).toHaveBeenCalledTimes(1);
+    expect(callbacks.on_error).not.toHaveBeenCalled();
+  });
+
+  it("second turn partial patch replaces only the targeted region", async () => {
+    const patch = JSON.stringify({
+      kind: "container",
+      id: "results",
+      children: [
+        { kind: "text", id: "results-text", text_type: "Paragraph", content: "Results loaded for Ada" },
+      ],
+    });
+
+    stream2.push(`data: ${patch}\n`);
+    stream2.close();
+
+    await waitFor(() => expect(callbacks.on_message_complete).toHaveBeenCalledTimes(2));
+
+    // The heading should still exist and be unchanged
+    expect(screen.getByRole("heading", { name: "Profile" })).not.toBeNull();
+
+    // The form should still exist with the submitted values
+    expect(screen.getByRole("form", { name: "form" })).not.toBeNull();
+    expect(screen.getByLabelText("name").value).toBe("Ada");
+
+    // The placeholder should be replaced with the new results content
+    expect(screen.queryByText("Submit to see results")).toBeNull();
+    expect(screen.getByText("Results loaded for Ada")).not.toBeNull();
+
     expect(callbacks.on_error).not.toHaveBeenCalled();
   });
 });
