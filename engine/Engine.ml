@@ -124,7 +124,7 @@ and run_turn t user_message =
         t.config.assets
         t.config.goal_prompt
         None;
-    messages = [{ role = User; content = user_message }];
+    messages = t.history;
   } in
   let request = t.config.request context in
   Utils.Log.debug "[ribosome engine] request url" request.url;

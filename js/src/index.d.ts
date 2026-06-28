@@ -1,6 +1,6 @@
 import type * as React from "react";
 
-export type RibosomeAdapter = "openai";
+export type RibosomeAdapter = "openai" | "groq" | "fireworks";
 
 export type RibosomeOpenAIModel =
   | "gpt-5.5"
@@ -17,10 +17,27 @@ export type RibosomeOpenAIModel =
   | "o3"
   | "o4-mini";
 
-export type RibosomeAdapterConfig = {
-  adapter: "openai";
-  model?: RibosomeOpenAIModel;
-};
+export type RibosomeGroqModel =
+  | "moonshotai/kimi-k2-instruct-0905";
+
+export type RibosomeFireworksModel =
+  | "accounts/fireworks/models/kimi-k2p6"
+  | "accounts/fireworks/models/kimi-k2-instruct-0905"
+  | "accounts/fireworks/models/kimi-k2-thinking";
+
+export type RibosomeAdapterConfig =
+  | {
+      adapter: "openai";
+      model?: RibosomeOpenAIModel;
+    }
+  | {
+      adapter: "groq";
+      model?: RibosomeGroqModel;
+    }
+  | {
+      adapter: "fireworks";
+      model?: RibosomeFireworksModel;
+    };
 
 export type RibosomeHeaders =
   | Record<string, string>
@@ -179,6 +196,7 @@ export type RibosomeConfig = {
   components: RibosomeComponents;
   assets?: RibosomeAsset[];
   callbacks?: RibosomeCallbacks;
+  reasoningEffort?: string;
 } & { adapterConfig?: RibosomeAdapterConfig };
 
 export type RibosomeEngine = {

@@ -7,6 +7,7 @@ import {
   reset_turn,
   run_turn,
   set_error,
+  submit,
 } from "../output/engine/Engine.js";
 
 const listToArray = (list) => {
@@ -170,7 +171,7 @@ describe("Engine runtime utilities", () => {
 
     expect(t.last_template).toMatchObject({ TAG: 2, _0: { id: "intro" } });
     expect(listToArray(t.history)).toMatchObject([
-      { role: 0, content: "Render the first UI" },
+      { role: 0 },
     ]);
     expect(t.config.callbacks.on_message_complete).toHaveBeenCalledWith(t.last_template);
   });
@@ -217,7 +218,7 @@ describe("Engine runtime utilities", () => {
     expect(t.config.callbacks.on_message_complete).toHaveBeenCalledTimes(3);
     expect(t.config.callbacks.on_error).not.toHaveBeenCalled();
     expect(listToArray(t.history)).toMatchObject([
-      { role: 0, content: "Render the first UI" },
+      { role: 0 },
       { role: 0 },
       { role: 0 },
     ]);
@@ -264,8 +265,155 @@ describe("Engine runtime utilities", () => {
     expect(t.last_error).toBe("HTTP request failed: 500 Server Error");
     expect(t.config.callbacks.on_message_complete).toHaveBeenCalledTimes(1);
     expect(listToArray(t.history)).toMatchObject([
-      { role: 0, content: "Render the first UI" },
+      { role: 0 },
       { role: 0 },
     ]);
+  });
+
+  it("preserves full root tree after partial patch reconciliation", () => {
+    unresolvedFetch();
+    const t = createRuntime({
+      components: {
+        container: () => null,
+        text: () => null,
+        broken: () => null,
+      },
+    });
+
+    // Turn 1: bot sends full root tree with multiple regions
+    const firstTurn = JSON.stringify({
+      kind: "container",
+      id: "root",
+      children: [
+        { kind: "container", id: "header-region", children: [{ kind: "text", id: "title", text_type: ["H1"], content: "Flight Booking" }] },
+        { kind: "container", id: "search-form-region", children: [{ kind: "submittable", id: "search-form", value: [{ kind: "input", id: "origin", value: "" }] }] },
+        { kind: "container", id: "results-region", children: [{ kind: "text", id: "placeholder", text_type: ["Paragraph"], content: "Search to see results" }] },
+        { kind: "container", id: "filters-region", children: [] },
+      ],
+    });
+
+    kick_off(t);
+    on_chunk(t, firstTurn);
+    on_done(t, 0);
+
+    // last_template should be full root tree
+    expect(t.last_template.TAG).toBe(3); // Container
+    const rootId = t.last_template._0.id;
+    expect(rootId).toBe("root");
+
+    // Turn 2: bot sends partial patch for results-region
+    const secondTurn = JSON.stringify({
+      kind: "container",
+      id: "results-region",
+      children: [
+        { kind: "list", id: "flight-results", children: [
+          { kind: "container", id: "flight-1", children: [{ kind: "text", id: "flight-1-name", text_type: ["Paragraph"], content: "Air NZ 123" }] },
+        ] },
+      ],
+    });
+
+    // Manually drive turn 2 as if user submitted
+    // We need to trigger submit but since we don't have rendered components with callbacks,
+    // we simulate by directly calling the internal flow
+    // First, let's simulate what submit does: inject input and call run_turn
+    // But actually, let's just verify that on_chunk with the patch preserves the full tree
+    on_chunk(t, secondTurn);
+    on_done(t, 0);
+
+    // After reconciliation, last_template should STILL be the full root tree
+    expect(t.last_template.TAG).toBe(3); // Container
+    expect(t.last_template._0.id).toBe("root");
+    // The root should have 4 children (header, search, results, filters)
+    const children = listToArray(t.last_template._0.children);
+    expect(children.length).toBe(4);
+    expect(children[0]._0.id).toBe("header-region");
+    expect(children[1]._0.id).toBe("search-form-region");
+    expect(children[2]._0.id).toBe("results-region");
+    expect(children[3]._0.id).toBe("filters-region");
+    // The results-region should now have the list child
+    expect(children[2]._0.children).not.toBe(0); // not empty list
+  });
+
+  it("sends full root tree in third turn request body after partial patch and submit", () => {
+    unresolvedFetch();
+    const requestLog = [];
+    const t = createRuntime({
+      components: {
+        container: () => null,
+        text: () => null,
+        submittable: () => null,
+        broken: () => null,
+      },
+      request: vi.fn((context) => {
+        requestLog.push(context);
+        return { url: "/stream", headers: [], body: "{}" };
+      }),
+    });
+
+    // Turn 1: bot sends full root tree
+    const firstTurn = JSON.stringify({
+      kind: "container",
+      id: "root",
+      children: [
+        { kind: "container", id: "header-region", children: [{ kind: "text", id: "title", text_type: ["H1"], content: "Flight Booking" }] },
+        { kind: "container", id: "search-form-region", children: [{ kind: "submittable", id: "search-form", value: [{ kind: "input", id: "origin", value: "" }] }] },
+        { kind: "container", id: "results-region", children: [{ kind: "text", id: "placeholder", text_type: ["Paragraph"], content: "Search to see results" }] },
+      ],
+    });
+
+    kick_off(t);
+    on_chunk(t, firstTurn);
+    on_done(t, 0);
+
+    // Simulate user submitting the search form
+    submit(t, {
+      template_id: "search-form",
+      values: list([
+        { id: "origin", value: { TAG: 1, _0: "AKL" } },
+      ]),
+    });
+
+    // Bot sends partial patch for results-region
+    const secondTurn = JSON.stringify({
+      kind: "container",
+      id: "results-region",
+      children: [
+        { kind: "list", id: "flight-results", children: [
+          { kind: "container", id: "flight-1", children: [
+            { kind: "text", id: "flight-1-name", text_type: ["Paragraph"], content: "Air NZ 123" },
+            { kind: "submittable", id: "select-flight-1", value: [] },
+          ] },
+        ] },
+      ],
+    });
+
+    on_chunk(t, secondTurn);
+    on_done(t, 0);
+
+    // Simulate user selecting a flight
+    submit(t, {
+      template_id: "select-flight-1",
+      values: list([]),
+    });
+
+    // Now check the request log
+    expect(requestLog.length).toBe(3);
+
+    // Turn 3 request should have 3 user messages
+    const thirdRequest = requestLog[2];
+    const messages = listToArray(thirdRequest.messages);
+    expect(messages.length).toBe(3);
+
+    // The latest message should contain the full root tree
+    const latestMessage = messages[messages.length - 1];
+    const treeJson = latestMessage.content.split("Current tree:\n\n")[1];
+    const tree = JSON.parse(treeJson);
+
+    expect(tree.kind).toBe("container");
+    expect(tree.id).toBe("root");
+    expect(tree.children.length).toBe(3);
+    expect(tree.children[0].id).toBe("header-region");
+    expect(tree.children[1].id).toBe("search-form-region");
+    expect(tree.children[2].id).toBe("results-region");
   });
 });

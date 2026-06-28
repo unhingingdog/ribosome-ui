@@ -72,6 +72,24 @@ let create_system_prompt active_kinds assets base_goal_prompt =
     assets_section assets;
   ]
 
+let anti_patterns_section =
+  String.concat "\n" [
+    "ANTI-PATTERNS — NEVER do these:";
+    "";
+    "1. NEVER emit a single flat form as the entire UI. A lone submittable with inputs is a chatbot in drag.";
+    "   Rich UIs have multiple independent zones: header, content, sidebar, status, actions.";
+    "";
+    "2. NEVER wrap everything in one giant container. If the tree is just {container -> [container -> [...]]},";
+    "   you have failed. Containers should group 2-4 related items, not swallow the entire page.";
+    "";
+    "3. NEVER re-emit the entire UI on later turns. The user sees a patch, not a page reload.";
+    "   If you emit id=\"root\" after turn 1, you are doing it wrong.";
+    "";
+    "4. NEVER use chat-style text blobs. No 'Here is your result:' paragraphs. Use stat, badge, list for data.";
+    "";
+    "5. NEVER put all user inputs in one massive form at the bottom. Distribute inputs near the data they affect.";
+  ]
+
 let first_turn_user_instructions =
   String.concat "\n" [
     "You are building a new UI from scratch.";
@@ -83,6 +101,8 @@ let first_turn_user_instructions =
     "- Do NOT nest all regions inside a single wrapper container";
     "- Make regions independent: header, list, detail, form, summary, status";
     "- Use specialized templates (stat, badge, list, text) instead of bare containers";
+    "";
+    anti_patterns_section;
     "";
     "Example of a rich first-turn output (list-detail view):";
     "{ \"kind\": \"container\", \"id\": \"root\", \"children\": [";
@@ -106,6 +126,26 @@ let first_turn_user_instructions =
     "MANDATE: If the tree is empty, your output MUST start with id=\"root\". No other id is acceptable on the first turn.";
   ]
 
+let progressive_enhancement_section =
+  String.concat "\n" [
+    "PROGRESSIVE ENHANCEMENT RULES:";
+    "";
+    "- The UI grows in complexity over turns, not all at once";
+    "- Turn 1: skeleton layout with placeholder content";
+    "- Turn 2+: fill in specific regions as the user interacts";
+    "- Add new regions when the user provides new data";
+    "- Remove or hide regions that are no longer relevant";
+    "- NEVER redraw the entire tree — the user will see a flash";
+    "";
+    "EXAMPLE: User asks to plan a trip";
+    "  Turn 1: Header 'Trip Planner' + empty destination list + submittable 'Enter destination'";
+    "  Turn 2: User submits 'Paris' → patch destination-list to show 'Paris', add weather-stat region";
+    "  Turn 3: User submits dates → patch trip-summary region with itinerary, add budget-stat region";
+    "  Turn 4: User asks to add hotel → patch hotel-list region (new region created this turn)";
+    "";
+    "The UI becomes richer as the conversation proceeds. Each turn adds or modifies ONE region.";
+  ]
+
 let later_turn_user_instructions =
   String.concat "\n" [
     "The user has interacted with the UI.";
@@ -115,6 +155,8 @@ let later_turn_user_instructions =
     "- Emit ONLY that region's replacement subtree";
     "- Do NOT re-emit unchanged regions";
     "- Preserve user input values when re-emitting the same submittable";
+    "";
+    progressive_enhancement_section;
     "";
     "Example 1: user selected a task, patch the detail region:";
     "{ \"kind\": \"container\", \"id\": \"task-detail\", \"children\": [";

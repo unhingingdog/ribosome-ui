@@ -229,6 +229,7 @@ describe.sequential("Engine end-to-end React streaming flow", () => {
     });
     expect(secondFetchBody.messages).toMatchObject([
       { role: 0 },
+      { role: 0 },
     ]);
     expect(callbacks.on_submit).toHaveBeenCalledTimes(1);
     expect(callbacks.on_error).not.toHaveBeenCalled();

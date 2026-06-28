@@ -2,6 +2,8 @@ import * as React from "react";
 
 import { create } from "../../output/engine/Engine.js";
 import { stream_adapter as openaiAdapter } from "../../output/engine/OpenaiAdapter.js";
+import { stream_adapter as groqAdapter } from "../../output/engine/GroqAdapter.js";
+import { stream_adapter as fireworksAdapter } from "../../output/engine/FireworksAdapter.js";
 
 const debug = (label, detail) => {
   if (typeof window !== "undefined" && window.__DEBUG__) {
@@ -63,16 +65,21 @@ const openAIMessages = (context) => [
 ];
 
 const buildRequest =
-  (url, headers, model = "gpt-4o") =>
+  (url, headers, model = "gpt-4o", reasoningEffort) =>
     (context) => {
+      const body = {
+        model,
+        stream: true,
+        response_format: { type: "json_object" },
+        messages: openAIMessages(context),
+      };
+      if (reasoningEffort) {
+        body.reasoning_effort = reasoningEffort;
+      }
       const request = {
         url,
         headers: normaliseHeaders(headers),
-        body: JSON.stringify({
-          model,
-          stream: true,
-          messages: openAIMessages(context),
-        }),
+        body: JSON.stringify(body),
       };
 
       debug("[ribosome adapter] request", request);
@@ -83,6 +90,12 @@ const resolveAdapter = (adapterConfig) => {
   const adapter = adapterConfig?.adapter ?? "openai";
   if (adapter === "openai") {
     return (payload) => openaiAdapter(payload);
+  }
+  if (adapter === "groq") {
+    return (payload) => groqAdapter(payload);
+  }
+  if (adapter === "fireworks") {
+    return (payload) => fireworksAdapter(payload);
   }
   throw new Error(`Unknown adapter: ${adapter}`);
 };
@@ -260,7 +273,7 @@ export function createEngineAdapter(config) {
     components: adaptComponents(config.components),
     templates: buildTemplateRegistry(config.components),
     assets: buildAssetRegistry(config.assets),
-    request: buildRequest(config.url, config.headers, model),
+    request: buildRequest(config.url, config.headers, model, config.reasoningEffort),
     stream_adapter: resolveAdapter(config.adapterConfig),
     callbacks: {
       on_error: config.callbacks?.on_error ?? (() => { }),

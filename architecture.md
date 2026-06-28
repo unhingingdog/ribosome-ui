@@ -9,7 +9,7 @@ Telomere is treated as a black box here: it receives incremental JSON text and r
 ```mermaid
 flowchart TD
   Consumer[Consumer App]
-  Facade[JS/NPM Facade\nfuture stable public API]
+  Facade[JS/NPM Facade\npublic API]
   Engine[Engine.ml\nmutable runtime + orchestration]
   EngineTypes[EngineTypes.ml\nconfig, request/history/handle types]
   State[State.ml\npure typed phase machine]
@@ -74,7 +74,7 @@ sequenceDiagram
   Engine->>State: kick_off any_state prompt
   State-->>Engine: Ok Sending
   Engine->>Engine: append current user message to internal history
-  Engine->>Engine: build request context with only current user message
+  Engine->>Engine: build request context with full user message history
   Engine->>Http: post requestConfig callbacks
   Http->>Stream: pump response.body reader
 
@@ -218,7 +218,7 @@ stateDiagram-v2
 
 Every parsed model response is treated as a patch against the current tree. If the patch root `id` matches an existing node, `Reconciler.ml` replaces that node and preserves the rest of the tree. If no matching `id` is found, the engine replaces the whole root with the parsed template.
 
-`Engine.ml` keeps a simple internal history of user messages, but the current request context sends only the current turn's user message. Assistant raw stream buffers are not appended to history. The prompt tells the model that the user message contains the current UI tree as JSON, including user input values from the previous interaction.
+`Engine.ml` keeps a simple internal history of user messages, and the current request context sends the full user message history. Assistant raw stream buffers are not appended to history. The prompt tells the model that the user message contains the current UI tree as JSON, including user input values from the previous interaction.
 
 `Engine.ml` also stores an abort callback for the current fetch. `reset` aborts in-flight work. Each accepted turn resets turn-local processor and error state before installing the next request's abort handle.
 
@@ -243,7 +243,7 @@ The engine sees only extracted text deltas. Provider details such as OpenAI-shap
 
 ## Public Package Boundary
 
-The final npm package should expose a small JS/TS facade rather than raw Melange-generated OCaml shapes.
+The npm package exposes a small JS/TS facade that wraps the Melange-generated OCaml internals.
 
 ```mermaid
 flowchart LR
@@ -273,23 +273,25 @@ Creating the engine prepares the runtime and renderer. The consumer starts the i
 
 The facade should convert between JS-native objects and internal Melange values so consumers never construct OCaml ADTs or lists directly.
 
-## Phase 2 Completion Checklist
+## Phase 2 Completion Status
 
-```mermaid
-flowchart TD
-  A[Define engine public/internal config] --> B[Create Engine.t runtime store]
-  B --> C[Implement state widening helpers]
-  C --> D[Implement explicit start flow]
-  D --> E[Stream chunks into backend]
-  E --> F[Render parsed templates]
-  F --> G[Reconcile parsed template patches by id]
-  G --> H[Wire submittable on_submit]
-  H --> I[Inject submitted values into current tree]
-  I --> J[Start next streamed turn]
-  J --> K[Add integration tests]
-  K --> L[Build npm-facing facade]
-  L --> M[Demo app / prototype parity]
-```
+Phase 2 is complete. All architecture components have been implemented, tested, and integrated.
+
+Completed milestones:
+
+- Engine public/internal config defined
+- `Engine.t` runtime store created
+- State widening helpers implemented
+- Explicit start flow implemented
+- Stream chunks pumped into backend
+- Parsed templates rendered
+- Template patches reconciled by id
+- Submittable `on_submit` wired
+- Submitted values injected into current tree
+- Next streamed turn started automatically
+- Integration tests added
+- npm-facing facade built
+- Demo app at prototype parity
 
 ## Telomere Internals And Interface
 

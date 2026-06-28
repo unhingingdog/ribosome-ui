@@ -9,42 +9,123 @@ import { components } from "./components";
 
 const storageKey = "ribosome-ui:demo";
 
+type Provider = "openai" | "groq" | "fireworks";
+
+const providerOptions: Provider[] = ["openai", "groq", "fireworks"];
+
+type ModelOption = { id: string; label: string };
+
+const modelOptionsByProvider: Record<Provider, ModelOption[]> = {
+  openai: [
+    { id: "gpt-4o", label: "gpt-4o (capable)" },
+    { id: "gpt-4o-mini", label: "gpt-4o-mini (cheap)" },
+    { id: "gpt-4.1", label: "gpt-4.1 (latest)" },
+    { id: "gpt-4.1-mini", label: "gpt-4.1-mini (fast)" },
+    { id: "o3", label: "o3 (reasoning)" },
+    { id: "o4-mini", label: "o4-mini (fast)" },
+  ],
+  groq: [
+    { id: "llama-3.1-8b-instant", label: "llama-3.1-8b-instant (fastest)" },
+    { id: "llama-3.3-70b-versatile", label: "llama-3.3-70b-versatile (capable)" },
+    { id: "meta-llama/llama-4-scout-17b-16e-instruct", label: "llama-4-scout (newest)" },
+    { id: "openai/gpt-oss-120b", label: "gpt-oss-120b (reasoning)" },
+    { id: "qwen/qwen3-32b", label: "qwen3-32b (balanced)" },
+    { id: "moonshotai/kimi-k2-instruct-0905", label: "kimi-k2 (premium)" },
+  ],
+  fireworks: [
+    { id: "accounts/fireworks/routers/kimi-k2p6-fast", label: "kimi-k2p6-fast (fastest)" },
+    { id: "accounts/fireworks/models/deepseek-v4-flash", label: "deepseek-v4-flash (cheap)" },
+    { id: "accounts/fireworks/models/glm-5p2", label: "glm-5p2 (flagship)" },
+    { id: "accounts/fireworks/models/glm-5p1", label: "glm-5p1 (proven)" },
+    { id: "accounts/fireworks/models/qwen3p7-plus", label: "qwen3.7-plus (balanced)" },
+    { id: "accounts/fireworks/models/llama4-maverick-instruct-basic", label: "llama-4-maverick (new)" },
+    { id: "accounts/fireworks/models/gemma-4-31b-it-nvfp4", label: "gemma-4-31b (new)" },
+  ],
+};
+
+const defaultUrls: Record<Provider, string> = {
+  openai: "https://api.openai.com/v1/chat/completions",
+  groq: "https://api.groq.com/openai/v1/chat/completions",
+  fireworks: "https://api.fireworks.ai/inference/v1/chat/completions",
+};
+
+type ReasoningOption = { value: string; label: string };
+
+const reasoningOptionsByModel: Record<string, ReasoningOption[]> = {
+  // OpenAI
+  "o3": [
+    { value: "low", label: "low (faster)" },
+    { value: "medium", label: "medium (default)" },
+    { value: "high", label: "high (deeper)" },
+  ],
+  "o4-mini": [
+    { value: "low", label: "low (faster)" },
+    { value: "medium", label: "medium (default)" },
+    { value: "high", label: "high (deeper)" },
+  ],
+  // Groq
+  "openai/gpt-oss-120b": [
+    { value: "low", label: "low (faster)" },
+    { value: "medium", label: "medium (default)" },
+    { value: "high", label: "high (deeper)" },
+  ],
+  // Fireworks
+  "accounts/fireworks/models/glm-5p1": [
+    { value: "none", label: "none (fastest)" },
+    { value: "medium", label: "medium (reasoning on)" },
+  ],
+  "accounts/fireworks/models/glm-5p2": [
+    { value: "high", label: "high (minimum)" },
+    { value: "max", label: "max (default)" },
+  ],
+  "accounts/fireworks/models/qwen3p7-plus": [
+    { value: "none", label: "none (fastest)" },
+    { value: "low", label: "low" },
+    { value: "medium", label: "medium (default)" },
+    { value: "high", label: "high" },
+  ],
+  "accounts/fireworks/models/deepseek-v4-flash": [
+    { value: "none", label: "none (fastest)" },
+    { value: "low", label: "low" },
+    { value: "medium", label: "medium" },
+    { value: "high", label: "high (default)" },
+    { value: "xhigh", label: "xhigh" },
+    { value: "max", label: "max" },
+  ],
+};
+
+function getReasoningOptions(modelId: string): ReasoningOption[] | null {
+  return reasoningOptionsByModel[modelId] ?? null;
+}
+
+function getDefaultReasoningEffort(modelId: string): string | undefined {
+  const options = getReasoningOptions(modelId);
+  if (!options) return undefined;
+  // Pick the option whose label contains "default" if any, else first non-none option, else first
+  const defaultOption = options.find((o) => o.label.includes("default"));
+  if (defaultOption) return defaultOption.value;
+  const firstNonNone = options.find((o) => o.value !== "none");
+  return firstNonNone?.value ?? options[0]?.value;
+}
+
 type DemoSettings = {
   goalPrompt: string;
   url: string;
   headers: Record<string, string>;
   assets: RibosomeAsset[];
-  adapterConfig?: {
-    adapter: "openai";
-    model?: RibosomeAdapterConfig["model"];
-  };
+  adapterConfig: RibosomeAdapterConfig;
+  reasoningEffort?: string;
 };
 
 type DemoDraft = DemoSettings & {
   persist: boolean;
 };
 
-const modelOptions = [
-  "gpt-5.5",
-  "gpt-5.5-pro",
-  "gpt-5.4-mini",
-  "gpt-5.4-nano",
-  "gpt-5",
-  "gpt-5-mini",
-  "gpt-5-nano",
-  "gpt-4o",
-  "gpt-4o-mini",
-  "gpt-4.1",
-  "gpt-4.1-mini",
-  "o3",
-  "o4-mini",
-] satisfies Array<NonNullable<RibosomeAdapterConfig["model"]>>;
-
 const defaultSettings: DemoSettings = {
   goalPrompt: "Create a small UI that asks the user for a name and greets them.",
-  url: "https://api.openai.com/v1/chat/completions",
+  url: defaultUrls.fireworks,
   headers: {
-    Authorization: "Bearer YOUR_OPENAI_API_KEY",
+    Authorization: "Bearer YOUR_API_KEY",
     "Content-Type": "application/json",
   },
   assets: [
@@ -55,9 +136,10 @@ const defaultSettings: DemoSettings = {
     },
   ],
   adapterConfig: {
-    adapter: "openai",
-    model: "gpt-4o-mini",
+    adapter: "fireworks",
+    model: "accounts/fireworks/models/glm-5p1",
   },
+  reasoningEffort: "none",
 };
 
 const readSavedSettings = (): DemoSettings | null => {
@@ -137,6 +219,7 @@ export function App() {
       assets: activeConfig.assets,
       components,
       adapterConfig: activeConfig.adapterConfig,
+      reasoningEffort: activeConfig.reasoningEffort,
     });
     engineRef.current = engine;
     engine.start();
@@ -154,6 +237,7 @@ export function App() {
       headers: draft.headers,
       assets: draft.assets,
       adapterConfig: draft.adapterConfig,
+      reasoningEffort: draft.reasoningEffort,
     };
 
     if (draft.persist) {
@@ -174,9 +258,16 @@ export function App() {
     setActiveConfig(null);
   };
 
+  const activeProvider = useMemo<Provider>(() => {
+    return (activeConfig?.adapterConfig?.adapter ?? "openai") as Provider;
+  }, [activeConfig]);
+
   const activeModel = useMemo(() => {
     return activeConfig?.adapterConfig?.model ?? "gpt-4o-mini";
   }, [activeConfig]);
+
+  const currentProvider = (draft.adapterConfig?.adapter ?? "openai") as Provider;
+  const currentModels = modelOptionsByProvider[currentProvider];
 
   if (!activeConfig) {
     return (
@@ -194,7 +285,7 @@ export function App() {
             />
           </div>
           <div style={formFieldStyle}>
-            <label htmlFor="url">OpenAI URL</label>
+            <label htmlFor="url">API URL</label>
             <input
               id="url"
               value={draft.url}
@@ -217,28 +308,85 @@ export function App() {
             />
           </div>
           <div style={formFieldStyle}>
-            <label htmlFor="model">Model</label>
+            <label htmlFor="provider">Provider</label>
             <select
-              id="model"
-              value={draft.adapterConfig?.model ?? "gpt-4o-mini"}
-              onChange={(event) =>
+              id="provider"
+              value={currentProvider}
+              onChange={(event) => {
+                const provider = event.target.value as Provider;
+                const newModelId = modelOptionsByProvider[provider][0].id;
                 setDraft((current) => ({
                   ...current,
+                  url: defaultUrls[provider],
                   adapterConfig: {
-                    adapter: "openai",
-                    model: event.target.value as RibosomeAdapterConfig["model"],
-                  },
-                }))
-              }
+                    adapter: provider,
+                    model: newModelId,
+                  } as RibosomeAdapterConfig,
+                  reasoningEffort: getDefaultReasoningEffort(newModelId),
+                }));
+              }}
               style={inputStyle}
             >
-              {modelOptions.map((model) => (
-                <option key={model} value={model}>
-                  {model}
+              {providerOptions.map((provider) => (
+                <option key={provider} value={provider}>
+                  {provider}
                 </option>
               ))}
             </select>
           </div>
+          <div style={formFieldStyle}>
+            <label htmlFor="model">Model</label>
+            <select
+              id="model"
+              value={draft.adapterConfig?.model ?? currentModels[0].id}
+              onChange={(event) => {
+                const newModelId = event.target.value;
+                setDraft((current) => ({
+                  ...current,
+                  adapterConfig: {
+                    ...(current.adapterConfig ?? { adapter: currentProvider }),
+                    model: newModelId,
+                  } as RibosomeAdapterConfig,
+                  reasoningEffort: getDefaultReasoningEffort(newModelId),
+                }));
+              }}
+              style={inputStyle}
+            >
+              {currentModels.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {(() => {
+            const reasoningOptions = getReasoningOptions(
+              draft.adapterConfig?.model ?? currentModels[0].id,
+            );
+            if (!reasoningOptions) return null;
+            return (
+              <div style={formFieldStyle}>
+                <label htmlFor="reasoningEffort">Reasoning effort</label>
+                <select
+                  id="reasoningEffort"
+                  value={draft.reasoningEffort ?? getDefaultReasoningEffort(draft.adapterConfig?.model ?? currentModels[0].id) ?? ""}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      reasoningEffort: event.target.value || undefined,
+                    }))
+                  }
+                  style={inputStyle}
+                >
+                  {reasoningOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            );
+          })()}
           <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
             <input
               type="checkbox"
@@ -259,6 +407,7 @@ export function App() {
     <main style={{ padding: 16, fontFamily: "sans-serif", maxWidth: 980 }}>
       <h1>Ribosome Demo</h1>
       <Panel>
+        <p>Provider: {activeProvider}</p>
         <p>Model: {activeModel}</p>
         <button type="button" onClick={resetConfig} style={buttonStyle}>
           Clear saved config and restart
