@@ -125,3 +125,7 @@
 (test
  (name runtime_test)
  (libraries dream_runtime dream_protocol ribosome_session ribosome_core templates lwt.unix))
+
+(test
+ (name bootstrap_test)
+ (libraries dream_server codex_client lwt.unix))

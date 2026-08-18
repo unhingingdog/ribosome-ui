@@ -1,0 +1,3 @@
+(library
+ (name dream_server)
+ (libraries codex_client dream lwt.unix))
