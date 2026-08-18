@@ -65,3 +65,7 @@
 (test
  (name codex_client_test)
  (libraries codex_client codex_protocol melange-json-native))
+
+(test
+ (name initialize_test)
+ (libraries codex_client codex_protocol melange-json-native))

@@ -42,10 +42,19 @@ let request state method_ params =
   let pending_request = { id; method_ } in
   let json = Codex_protocol.JsonRpc.encode_request { id; method_; params } in
   let command = Send_line (Melange_json.to_string json) in
-  command, {
+  pending_request, command, {
     next_id = state.next_id + 1;
     pending = state.pending @ [pending_request];
   }
+
+let notification method_ params =
+  let fields = [
+    ("jsonrpc", `String "2.0");
+    ("method", `String method_);
+  ] in
+  match params with
+  | Some value -> Send_line (Melange_json.to_string (`Assoc (fields @ [("params", value)])))
+  | None -> Send_line (Melange_json.to_string (`Assoc fields))
 
 let rec take_pending id retained = function
   | [] -> None, Stdlib.List.rev retained

@@ -4,15 +4,17 @@ let assert_equal label expected actual =
   if expected <> actual then failwith label
 
 let test_assigns_request_ids () =
-  let command, state = Client.request (Client.create ()) "initialize" None in
+  let pending, command, state = Client.request (Client.create ()) "initialize" None in
   assert_equal "request is encoded as a JSON-RPC line"
     (Client.Send_line "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\"}") command;
-  assert_equal "request is pending"
+  assert_equal "request metadata is returned"
     [{ Client.id = Codex_protocol.JsonRpc.Integer 1; method_ = "initialize" }]
-    state.pending
+    [pending];
+  assert_equal "request is pending"
+    [pending] state.pending
 
 let test_correlates_response () =
-  let _, requested = Client.request (Client.create ()) "initialize" None in
+  let _, _, requested = Client.request (Client.create ()) "initialize" None in
   let event, state = Client.receive requested
     "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"ready\":true}}" in
   assert_equal "response is matched to its request"
