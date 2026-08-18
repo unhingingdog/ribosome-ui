@@ -13,6 +13,7 @@ type t = {
   thread: Codex_client.Thread.thread option;
   tree: Ribosome_core.Types.template option;
   revision: int;
+  stream: Ribosome_incremental.Incremental.state;
   connections: string list;
   generation: generation option;
   lifecycle: lifecycle;
@@ -38,6 +39,14 @@ type generation_error =
   | Cancellation_already_requested
   | Wrong_turn
 
+type stream_error = Stream_session_closed
+
+type emission =
+  | Template_updated of {
+      revision: int;
+      tree: Ribosome_core.Types.template;
+    }
+
 type accepted_event = {
   event_id: string;
   event: Dream_protocol.ClientMessage.component_event;
@@ -48,6 +57,7 @@ let create id = {
   thread = None;
   tree = None;
   revision = 0;
+  stream = Ribosome_incremental.Incremental.create None;
   connections = [];
   generation = None;
   lifecycle = Starting;
@@ -73,6 +83,21 @@ let disconnect session connection_id = {
 }
 
 let close session = { session with lifecycle = Closed; connections = [] }
+
+let feed_delta session delta =
+  match session.lifecycle with
+  | Closed -> Error Stream_session_closed
+  | Starting | Ready ->
+    let update, stream = Ribosome_incremental.Incremental.feed session.stream delta in
+    (match update with
+     | Ribosome_incremental.Incremental.Updated tree ->
+       let revision = session.revision + 1 in
+       let session = { session with tree = Some tree; revision; stream } in
+       Ok (session, Some (Template_updated { revision; tree }))
+     | Ribosome_incremental.Incremental.Pending
+     | Ribosome_incremental.Incremental.Rejected _
+     | Ribosome_incremental.Incremental.Corrupted ->
+       Ok ({ session with stream }, None))
 
 let start_generation session turn =
   match session.lifecycle, session.thread, session.generation with

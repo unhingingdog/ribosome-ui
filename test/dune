@@ -113,3 +113,7 @@
 (test
  (name session_generation_test)
  (libraries ribosome_session codex_client))
+
+(test
+ (name session_stream_test)
+ (libraries ribosome_session ribosome_core ribosome_incremental templates))
