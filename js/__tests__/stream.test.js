@@ -60,7 +60,7 @@ describe("Stream SSE parser", () => {
     const payloads = [];
 
     for (const chunk of [
-      'data: {"kind":"container","id":"root","children":[',
+      'data: {"kind":"container","id":"root","direction":"vertical","children":[',
       '{"kind":"text","id":"intro","text_type":"Paragraph",',
       '"content":"Hello"},{"kind":"input","id":"name",',
       '"value":{"String":""}}]}\n\n',
@@ -74,6 +74,7 @@ describe("Stream SSE parser", () => {
     expect(JSON.parse(payloads[0])).toEqual({
       kind: "container",
       id: "root",
+      direction: "vertical",
       children: [
         {
           kind: "text",

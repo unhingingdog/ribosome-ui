@@ -61,6 +61,7 @@ export type RibosomeBadgeVariant =
   | "Warning"
   | "Error"
   | "Info";
+export type RibosomeContainerDirection = "vertical" | "horizontal";
 
 export type RibosomeInputProps = {
   kind: "input";
@@ -85,6 +86,7 @@ export type RibosomeImageProps = {
 export type RibosomeContainerProps = {
   kind: "container";
   id: string;
+  direction: RibosomeContainerDirection;
   children?: React.ReactNode;
   [key: string]: unknown;
 };

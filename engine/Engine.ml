@@ -4,6 +4,7 @@ let root_template =
   Types.Container {
     kind = "container";
     id = "root";
+    direction = Templates.Container.Vertical;
     children = [];
   }
 

@@ -30,6 +30,7 @@ let test_parse_registry_to_prompt () =
   assert_contains "registry includes text heading" prompt "## text";
   assert_contains "registry includes container heading" prompt "## container";
   assert_contains "registry includes field requirement" prompt "value (string, required)";
+  assert_contains "registry includes container direction" prompt "direction (string, required)";
   assert_contains "registry includes instructions" prompt "Use container for layout, grouping"
 
 let test_create_system_prompt () =

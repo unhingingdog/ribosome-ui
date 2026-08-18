@@ -19,6 +19,7 @@ const exampleTemplate = {
 const exampleContainer = {
   kind: "container",
   id: "2",
+  direction: "vertical",
   children: [exampleTemplate],
 };
 
@@ -92,6 +93,14 @@ describe("Parser", () => {
 
   it("parses a container with valid children", () => {
     const result = unwrap(parse_data(JSON.stringify(exampleContainer)));
+    expect(result).toBeDefined();
+  });
+
+  it("parses a horizontal container", () => {
+    const result = unwrap(parse_data(JSON.stringify({
+      ...exampleContainer,
+      direction: "horizontal",
+    })));
     expect(result).toBeDefined();
   });
 

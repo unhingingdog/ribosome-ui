@@ -61,6 +61,7 @@ module Keyable = struct
     key: string;
     id: string;
     kind: string;
+    direction: Templates.Container.direction;
   }
 
   type keyed_list = {
@@ -130,6 +131,7 @@ let container_to_keyed (container: container) : keyed_container = {
   key = container.id;
   id = container.id;
   kind = container.kind;
+  direction = container.direction;
 }
 
 let list_to_keyed (list: template_list) : keyed_list = {

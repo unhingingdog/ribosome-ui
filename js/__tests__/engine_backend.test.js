@@ -8,7 +8,7 @@ describe("EngineBackend streaming", () => {
     let processor = create_processor();
 
     const first = handle_chunk(
-      '{"kind":"container","id":"root","children":[{"kind":"text","id":"title","text_type":"H1"',
+      '{"kind":"container","id":"root","direction":"vertical","children":[{"kind":"text","id":"title","text_type":"H1"',
       processor,
     );
 

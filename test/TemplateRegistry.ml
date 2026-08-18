@@ -19,6 +19,9 @@ let all_definitions : TemplateDefinitionTypes.template_definition list =
       fields = [
         kind_field "container";
         id_field "container";
+        string_field
+          "direction"
+          "One of: vertical | horizontal.";
         template_list_field "children" "Child templates to render inside this container.";
       ];
     };

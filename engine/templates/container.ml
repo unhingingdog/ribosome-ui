@@ -1,8 +1,20 @@
 open Melange_json.Primitives
 
+type direction = Vertical | Horizontal
+
+let direction_of_string = function
+  | "vertical" -> Vertical
+  | "horizontal" -> Horizontal
+  | value -> failwith ("unknown container direction: " ^ value)
+
+let string_of_direction = function
+  | Vertical -> "vertical"
+  | Horizontal -> "horizontal"
+
 type 'template t = {
   kind: string;
   id: string;
+  direction: direction;
   children: 'template list
 }
 
@@ -11,6 +23,7 @@ let deserialise json =
   {
     kind = field "kind" string json;
     id = field "id" string json;
+    direction = field "direction" (fun value -> direction_of_string (string value)) json;
     children = [];
   }
 
@@ -19,6 +32,7 @@ let serialise template child_serialiser =
   Js.Json.object_ (Js.Dict.fromList [
     ("kind", string_to_json template.kind); 
     ("id", string_to_json template.id); 
+    ("direction", string_to_json (string_of_direction template.direction));
     ("children", serialised_children); 
   ])
 
@@ -40,6 +54,9 @@ let definition : TemplateDefinitionTypes.template_definition = {
       required = true;
       instructions = "Stable id for this container.";
     };
+    TemplateDefinitionTypes.string_field
+      "direction"
+      "One of: vertical | horizontal.";
     {
       name = "children";
       field_type = TemplateDefinitionTypes.TemplateList;
