@@ -1,0 +1,6 @@
+(include_subdirs no)
+
+(library
+ (name template_codecs)
+ (modes melange)
+ (libraries templates melange melange-json))

@@ -1,5 +1,5 @@
 (copy_files ../engine/State.ml)
-(copy_files ../engine/TemplateDefinitionTypes.ml)
+(copy_files ../engine/templates/TemplateDefinitionTypes.ml)
 (copy_files ../engine/Prompt.ml)
 (copy_files ../engine/templates/container.ml)
 (copy_files ../engine/templates/input.ml)

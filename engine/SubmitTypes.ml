@@ -44,15 +44,15 @@ let rec inject_user_input (template: template) (inputs: submitted_input list) =
 
 let rec serialise_template (template: template) =
   match template with 
-    | Image data -> Templates.ImageCodec.serialise data
-    | Text data -> Templates.TextCodec.serialise data
-    | Badge data -> Templates.BadgeCodec.serialise data
-    | Stat data -> Templates.StatCodec.serialise data
-    | Divider data -> Templates.DividerCodec.serialise data
-    | Broken data -> Templates.BrokenCodec.serialise data
-    | Submittable data -> Templates.SubmittableCodec.serialise data
-    | Container data -> Templates.ContainerCodec.serialise data (fun child -> serialise_template child)
-    | List data -> Templates.ListCodec.serialise data (fun child -> serialise_template child)
+    | Image data -> Template_codecs.ImageCodec.serialise data
+    | Text data -> Template_codecs.TextCodec.serialise data
+    | Badge data -> Template_codecs.BadgeCodec.serialise data
+    | Stat data -> Template_codecs.StatCodec.serialise data
+    | Divider data -> Template_codecs.DividerCodec.serialise data
+    | Broken data -> Template_codecs.BrokenCodec.serialise data
+    | Submittable data -> Template_codecs.SubmittableCodec.serialise data
+    | Container data -> Template_codecs.ContainerCodec.serialise data (fun child -> serialise_template child)
+    | List data -> Template_codecs.ListCodec.serialise data (fun child -> serialise_template child)
 
 
 (*

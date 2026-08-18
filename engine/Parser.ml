@@ -12,14 +12,14 @@ let parse_template json =
   try 
   debug "[ribosome parsing] parse_template kind" (field "kind" string json);
   match field "kind" string json with
-  | "image" -> catch (fun () -> Image (Templates.ImageCodec.deserialise json))
-  | "text" -> catch (fun () -> Text (Templates.TextCodec.deserialise json))
-  | "submittable" -> catch (fun () -> Submittable (Templates.SubmittableCodec.deserialise json))
-  | "container" -> catch (fun () -> Container (Templates.ContainerCodec.deserialise json))
-  | "badge" -> catch (fun () -> Badge (Templates.BadgeCodec.deserialise json))
-  | "list" -> catch (fun () -> List (Templates.ListCodec.deserialise json))
-  | "stat" -> catch (fun () -> Stat (Templates.StatCodec.deserialise json))
-  | "divider" -> catch (fun () -> Divider (Templates.DividerCodec.deserialise json))
+  | "image" -> catch (fun () -> Image (Template_codecs.ImageCodec.deserialise json))
+  | "text" -> catch (fun () -> Text (Template_codecs.TextCodec.deserialise json))
+  | "submittable" -> catch (fun () -> Submittable (Template_codecs.SubmittableCodec.deserialise json))
+  | "container" -> catch (fun () -> Container (Template_codecs.ContainerCodec.deserialise json))
+  | "badge" -> catch (fun () -> Badge (Template_codecs.BadgeCodec.deserialise json))
+  | "list" -> catch (fun () -> List (Template_codecs.ListCodec.deserialise json))
+  | "stat" -> catch (fun () -> Stat (Template_codecs.StatCodec.deserialise json))
+  | "divider" -> catch (fun () -> Divider (Template_codecs.DividerCodec.deserialise json))
   | kind -> 
     debug "[ribosome parsing] Soft failure - Unknown template kind" kind;
     Broken (Soft "Unknown template")
