@@ -105,3 +105,7 @@
 (test
  (name session_test)
  (libraries ribosome_session codex_client ribosome_core))
+
+(test
+ (name session_event_test)
+ (libraries ribosome_session dream_protocol ribosome_core templates))
