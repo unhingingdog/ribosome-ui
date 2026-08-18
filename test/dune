@@ -81,3 +81,7 @@
 (test
  (name turn_test)
  (libraries codex_client codex_protocol melange-json-native))
+
+(test
+ (name generation_test)
+ (libraries codex_client codex_protocol melange-json-native))
