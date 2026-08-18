@@ -45,3 +45,7 @@
 (test
  (name traversal_test)
  (libraries ribosome_core templates))
+
+(test
+ (name validation_test)
+ (libraries ribosome_core templates))
