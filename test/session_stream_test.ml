@@ -18,7 +18,7 @@ let test_commits_valid_streamed_template () =
     assert_equal "valid template increments the session revision" 1 revision;
     assert_equal "valid template becomes authoritative" (Some (text "After")) session.tree;
     assert_equal "effect contains the complete reconciled tree" (text "After") tree
-  | Ok (_, None) | Error _ -> failwith "expected template update"
+  | Ok (_, None) | Ok (_, Some (Session.Session_state _)) | Error _ -> failwith "expected template update"
 
 let test_preserves_state_for_invalid_streamed_template () =
   let session = Session.create "session-1" in

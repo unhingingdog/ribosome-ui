@@ -12,6 +12,7 @@ let test_creates_uninitialized_session () =
       revision = 0;
       stream = Ribosome_incremental.Incremental.create None;
       connections = [];
+      recent_event_ids = [];
       generation = None;
       lifecycle = Starting;
     }
@@ -28,6 +29,7 @@ let test_attaches_one_codex_thread () =
       revision = 0;
       stream = Ribosome_incremental.Incremental.create None;
       connections = [];
+      recent_event_ids = [];
       generation = None;
       lifecycle = Ready;
     })

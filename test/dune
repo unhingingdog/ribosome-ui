@@ -117,3 +117,7 @@
 (test
  (name session_stream_test)
  (libraries ribosome_session ribosome_core ribosome_incremental templates))
+
+(test
+ (name session_reconnect_test)
+ (libraries ribosome_session))

@@ -15,6 +15,7 @@ type t = {
   revision: int;
   stream: Ribosome_incremental.Incremental.state;
   connections: string list;
+  recent_event_ids: string list;
   generation: generation option;
   lifecycle: lifecycle;
 }
@@ -30,6 +31,7 @@ type event_error =
   | No_template
   | Unknown_component of string
   | Invalid_component_event
+  | Duplicate_event_id
 
 type generation_error =
   | Generation_session_closed
@@ -42,6 +44,10 @@ type generation_error =
 type stream_error = Stream_session_closed
 
 type emission =
+  | Session_state of {
+      revision: int;
+      tree: Ribosome_core.Types.template option;
+    }
   | Template_updated of {
       revision: int;
       tree: Ribosome_core.Types.template;
@@ -59,6 +65,7 @@ let create id = {
   revision = 0;
   stream = Ribosome_incremental.Incremental.create None;
   connections = [];
+  recent_event_ids = [];
   generation = None;
   lifecycle = Starting;
 }
@@ -83,6 +90,11 @@ let disconnect session connection_id = {
 }
 
 let close session = { session with lifecycle = Closed; connections = [] }
+
+let snapshot session = Session_state { revision = session.revision; tree = session.tree }
+
+let reconnect session connection_id =
+  Result.map (fun session -> session, snapshot session) (connect session connection_id)
 
 let feed_delta session delta =
   match session.lifecycle with
@@ -192,15 +204,30 @@ let accepts_event tree = function
        Stdlib.List.for_all (fun (field_id, _) -> Stdlib.List.mem field_id field_ids) values
      | Some _ | None -> false)
 
+let max_recent_event_ids = 128
+
+let remember_event_id event_id event_ids =
+  let event_ids = event_ids @ [event_id] in
+  let excess = Stdlib.List.length event_ids - max_recent_event_ids in
+  if excess <= 0 then event_ids else
+    let rec drop count = function
+      | [] -> []
+      | _ :: remaining when count > 0 -> drop (count - 1) remaining
+      | values -> values
+    in
+    drop excess event_ids
+
 let reduce_event session = function
   | Dream_protocol.ClientMessage.Component_event { session_id; event_id; base_revision; event } ->
     if session_id <> session.id then Error Wrong_session
     else if base_revision <> session.revision then Error Stale_revision
+    else if Stdlib.List.mem event_id session.recent_event_ids then Error Duplicate_event_id
     else
       (match session.tree with
        | None -> Error No_template
        | Some tree ->
-         if accepts_event tree event then Ok { event_id; event }
+         if accepts_event tree event then
+           Ok ({ session with recent_event_ids = remember_event_id event_id session.recent_event_ids }, { event_id; event })
          else
            let id = match event with
              | Dream_protocol.ClientMessage.Click { id }
