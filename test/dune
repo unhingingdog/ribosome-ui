@@ -53,3 +53,7 @@
 (test
  (name native_codec_test)
  (libraries ribosome_native_codec ribosome_core templates yojson))
+
+(test
+ (name incremental_test)
+ (libraries ribosome_incremental ribosome_core templates))

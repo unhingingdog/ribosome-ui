@@ -1,4 +1,5 @@
 open Ribosome_core
+open Melange_json.Primitives
 
 type error = string
 
@@ -153,9 +154,15 @@ let with_legacy_text_value json =
   match json with
   | `Assoc fields when not (Stdlib.List.mem_assoc "value" fields) ->
     (match Stdlib.List.assoc_opt "content" fields with
-     | Some content -> `Assoc (("value", content) :: fields)
+     | Some content ->
+       `Assoc (("value", content) :: Stdlib.List.remove_assoc "content" fields)
      | None -> json)
   | _ -> json
+
+let without_fields names = function
+  | `Assoc fields ->
+    `Assoc (Stdlib.List.filter (fun (name, _) -> not (Stdlib.List.mem name names)) fields)
+  | json -> json
 
 let decode_input fields =
   let* kind = required "kind" decode_string fields in
@@ -174,7 +181,7 @@ let decode_submittable_field json =
       Templates.Select.kind = value.kind;
       id = value.id;
       label = value.label;
-      options = Stdlib.List.map (fun option_ -> {
+      options = Stdlib.List.map (fun (option_ : select_option) -> {
         Templates.Select.value = option_.value;
         label = option_.label;
       }) value.options;
@@ -217,7 +224,7 @@ and decode_image json =
   })
 
 and decode_submittable json fields =
-  let* header = decode_generated submittable_of_json json in
+  let* header = decode_generated submittable_of_json (without_fields ["value"; "button"] json) in
   let* value = required "value" (decode_list decode_submittable_field) fields in
   let* button = optional "button" (fun button_json ->
     let* value = decode_generated button_of_json button_json in
@@ -238,7 +245,7 @@ and decode_submittable json fields =
   })
 
 and decode_container json fields =
-  let* header = decode_generated container_of_json json in
+  let* header = decode_generated container_of_json (without_fields ["children"] json) in
   let* direction = decode_direction header.direction in
   let* children = required "children" (decode_list decode_template) fields in
   Ok (Types.Container {
@@ -259,7 +266,7 @@ and decode_badge json =
   })
 
 and decode_list_template json fields =
-  let* header = decode_generated template_list_of_json json in
+  let* header = decode_generated template_list_of_json (without_fields ["children"] json) in
   let* children = required "children" (decode_list decode_template) fields in
   Ok (Types.List {
     Templates.List.kind = header.kind;
@@ -317,7 +324,7 @@ let encode_select select =
     kind = select.Templates.Select.kind;
     id = select.id;
     label = select.label;
-    options = Stdlib.List.map (fun option_ -> {
+    options = Stdlib.List.map (fun (option_ : Templates.Select.option_) -> {
       value = option_.Templates.Select.value;
       label = option_.label;
     }) select.options;

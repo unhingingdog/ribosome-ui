@@ -1,0 +1,3 @@
+(library
+ (name ribosome_incremental)
+ (libraries ribosome_core ribosome_native_codec telomere))

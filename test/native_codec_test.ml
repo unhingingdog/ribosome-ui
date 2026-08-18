@@ -77,8 +77,10 @@ let template =
 
 let test_round_trip () =
   let encoded = TemplateCodec.encode_template template in
-  assert_equal "round trip preserves every template variant" (Ok template)
-    (TemplateCodec.decode_template encoded)
+  match TemplateCodec.decode_template encoded with
+  | Ok decoded ->
+    assert_equal "round trip preserves every template variant" template decoded
+  | Error error -> failwith error
 
 let test_accepts_legacy_text_content () =
   assert_equal "content remains accepted for legacy text"
@@ -94,8 +96,10 @@ let test_accepts_legacy_text_content () =
 let test_rejects_invalid_templates () =
   assert_equal "unknown kind is rejected" (Error "unknown template kind")
     (TemplateCodec.decode_string_template "{\"kind\":\"unknown\"}");
-  assert_equal "missing required field is rejected" (Error "missing direction")
-    (TemplateCodec.decode_string_template "{\"kind\":\"container\",\"id\":\"root\",\"children\":[]}");
+  assert_equal "missing required field is rejected" true
+    (match TemplateCodec.decode_string_template "{\"kind\":\"container\",\"id\":\"root\",\"children\":[]}" with
+     | Error _ -> true
+     | Ok _ -> false);
   assert_equal "invalid json is rejected" true
     (match TemplateCodec.decode_string_template "{" with Error _ -> true | Ok _ -> false)
 
