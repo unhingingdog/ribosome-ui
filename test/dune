@@ -133,3 +133,7 @@
 (test
  (name websocket_test)
  (libraries dream_server dream_protocol dream_runtime ribosome_session))
+
+(test
+ (name first_turn_test)
+ (libraries dream_server codex_client ribosome_session lwt.unix))

@@ -10,8 +10,10 @@ type config = {
 
 type ready = {
   process: Codex_client.Stdio.t;
+  client: Codex_client.Client.state;
   server_info: Codex_client.Initialize.server_info;
   skill: Codex_client.Skills.skill;
+  cwd: string;
 }
 
 type error =
@@ -98,7 +100,13 @@ let start config =
             send process command >>= (function
               | Error error -> fail process error
               | Ok () ->
-                await_skill process client phase >|= Result.map (fun (_, skill) -> { process; server_info; skill }))
+                await_skill process client phase >|= Result.map (fun (client, skill) -> {
+                  process;
+                  client;
+                  server_info;
+                  skill;
+                  cwd = config.cwd;
+                }))
           | Ok _ -> fail process Skill_readiness_failed)
 
 let health_json = "{\"status\":\"ready\"}"

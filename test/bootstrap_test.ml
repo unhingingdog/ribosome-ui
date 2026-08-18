@@ -19,6 +19,7 @@ let test_bootstraps_ready_codex () =
   | Ok ready ->
     assert_equal "bootstrap records the ready Ribosome skill" "ribosome" ready.skill.name;
     assert_equal "bootstrap records Codex server metadata" "codex" ready.server_info.user_agent;
+    assert_equal "bootstrap retains the configured working directory" "/opt/ribosome" ready.cwd;
     ignore (Lwt_main.run (Codex_client.Stdio.shutdown ready.process))
   | Error _ -> failwith "expected ready Codex app-server"
 
