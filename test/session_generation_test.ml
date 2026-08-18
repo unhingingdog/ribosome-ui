@@ -4,7 +4,7 @@ let assert_equal label expected actual =
   if expected <> actual then failwith label
 
 let ready_session () =
-  match Session.attach_thread (Session.create "session-1") Codex_client.Thread.{ id = "thread-1" } with
+  match Session.attach_thread (Session.create ~initial_prompt:"Initial request" "session-1") Codex_client.Thread.{ id = "thread-1" } with
   | Ok session -> session
   | Error _ -> failwith "expected thread attachment"
 

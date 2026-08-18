@@ -10,6 +10,7 @@ type generation = {
 
 type t = {
   id: string;
+  initial_prompt: string;
   thread: Codex_client.Thread.thread option;
   tree: Ribosome_core.Types.template option;
   revision: int;
@@ -58,8 +59,9 @@ type accepted_event = {
   event: Dream_protocol.ClientMessage.component_event;
 }
 
-let create id = {
+let create ~initial_prompt id = {
   id;
+  initial_prompt;
   thread = None;
   tree = None;
   revision = 0;
@@ -236,6 +238,6 @@ let reduce_event session = function
            in
            if Stdlib.List.mem id (Ribosome_core.Traversal.ids tree) then Error Invalid_component_event
            else Error (Unknown_component id))
-  | Dream_protocol.ClientMessage.New_session
+  | Dream_protocol.ClientMessage.New_session _
   | Dream_protocol.ClientMessage.Resume_session _
   | Dream_protocol.ClientMessage.Cancel _ -> Error Not_component_event

@@ -3,7 +3,7 @@ open Lwt.Infix
 let assert_equal label expected actual =
   if expected <> actual then failwith label
 
-let session = Ribosome_session.Session.create "session-1"
+let session = Ribosome_session.Session.create ~initial_prompt:"Initial request" "session-1"
 
 let test_registry_owns_sessions () =
   let registry = match Dream_runtime.Runtime.add_session Dream_runtime.Runtime.empty_registry session with

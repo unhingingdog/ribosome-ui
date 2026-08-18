@@ -11,7 +11,7 @@ let text content = Ribosome_core.Types.Text Templates.Text.{
 }
 
 let test_commits_valid_streamed_template () =
-  let session = Session.create "session-1" in
+  let session = Session.create ~initial_prompt:"Initial request" "session-1" in
   match Session.feed_delta session
     "{\"kind\":\"text\",\"id\":\"title\",\"text_type\":\"Paragraph\",\"value\":\"After\"}" with
   | Ok (session, Some (Session.Template_updated { revision; tree })) ->
@@ -21,7 +21,7 @@ let test_commits_valid_streamed_template () =
   | Ok (_, None) | Ok (_, Some (Session.Session_state _)) | Error _ -> failwith "expected template update"
 
 let test_preserves_state_for_invalid_streamed_template () =
-  let session = Session.create "session-1" in
+  let session = Session.create ~initial_prompt:"Initial request" "session-1" in
   let session, _ = match Session.feed_delta session
     "{\"kind\":\"text\",\"id\":\"title\",\"text_type\":\"Paragraph\",\"value\":\"Before\"}" with
     | Ok result -> result

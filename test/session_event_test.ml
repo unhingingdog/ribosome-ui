@@ -10,7 +10,7 @@ let tree = Ribosome_core.Types.Submittable Templates.Submittable.{
   button = Some Templates.Button.{ kind = "button"; id = "save"; label = "Save"; action = Submit; disabled = None };
 }
 
-let session = Session.{ (create "session-1") with tree = Some tree; lifecycle = Ready }
+let session = Session.{ (create ~initial_prompt:"Initial request" "session-1") with tree = Some tree; lifecycle = Ready }
 
 let event event_id base_revision event = Dream_protocol.ClientMessage.Component_event {
   session_id = "session-1";

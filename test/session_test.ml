@@ -7,6 +7,7 @@ let test_creates_uninitialized_session () =
   assert_equal "a new session has no generated state"
     Session.{
       id = "session-1";
+      initial_prompt = "Initial request";
       thread = None;
       tree = None;
       revision = 0;
@@ -16,14 +17,15 @@ let test_creates_uninitialized_session () =
       generation = None;
       lifecycle = Starting;
     }
-    (Session.create "session-1")
+    (Session.create ~initial_prompt:"Initial request" "session-1")
 
 let test_attaches_one_codex_thread () =
-  let session = Session.create "session-1" in
+  let session = Session.create ~initial_prompt:"Initial request" "session-1" in
   let thread = Codex_client.Thread.{ id = "thread-1" } in
   assert_equal "thread ownership belongs to the Dream session"
     (Ok Session.{
       id = "session-1";
+      initial_prompt = "Initial request";
       thread = Some thread;
       tree = None;
       revision = 0;
@@ -36,7 +38,7 @@ let test_attaches_one_codex_thread () =
     (Session.attach_thread session thread)
 
 let test_connection_membership_is_idempotent () =
-  let session = Session.create "session-1" in
+  let session = Session.create ~initial_prompt:"Initial request" "session-1" in
   let connected = match Session.connect session "connection-1" with
     | Ok session -> session
     | Error _ -> failwith "expected connection"
@@ -46,7 +48,7 @@ let test_connection_membership_is_idempotent () =
     (Session.connect connected "connection-1")
 
 let test_closing_drops_connections () =
-  let session = Session.create "session-1" in
+  let session = Session.create ~initial_prompt:"Initial request" "session-1" in
   let session = match Session.connect session "connection-1" with
     | Ok session -> session
     | Error _ -> failwith "expected connection"

@@ -21,6 +21,16 @@ let test_decodes_resume () =
     (Dream_protocol.ClientMessage.decode_string
       "{\"protocolVersion\":1,\"type\":\"resumeSession\",\"sessionId\":\"session-1\"}")
 
+let test_requires_initial_prompt () =
+  assert_equal "new sessions carry the consumer's first turn input"
+    (Ok (Dream_protocol.ClientMessage.New_session { initial_prompt = "Explain this change." }))
+    (Dream_protocol.ClientMessage.decode_string
+      "{\"protocolVersion\":1,\"type\":\"newSession\",\"initialPrompt\":\"Explain this change.\"}");
+  assert_equal "blank initial prompts are rejected"
+    (Error "initialPrompt must not be blank")
+    (Dream_protocol.ClientMessage.decode_string
+      "{\"protocolVersion\":1,\"type\":\"newSession\",\"initialPrompt\":\"   \"}")
+
 let test_rejects_unknown_versions () =
   assert_equal "protocol version is mandatory"
     (Error "unsupported protocol version")
@@ -29,4 +39,5 @@ let test_rejects_unknown_versions () =
 let () =
   test_encodes_component_event ();
   test_decodes_resume ();
+  test_requires_initial_prompt ();
   test_rejects_unknown_versions ()

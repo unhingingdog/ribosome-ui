@@ -45,10 +45,10 @@ let connect state session =
      | Error error -> Error error)
 
 let negotiate state = function
-  | Dream_protocol.ClientMessage.New_session ->
+  | Dream_protocol.ClientMessage.New_session { initial_prompt } ->
     let session_id = "session-" ^ string_of_int state.next_session_id in
     state.next_session_id <- state.next_session_id + 1;
-    let session = Ribosome_session.Session.create session_id in
+    let session = Ribosome_session.Session.create ~initial_prompt session_id in
     (match Dream_runtime.Runtime.add_session !(state.registry) session with
      | Error _ -> Error Session_transition_failed
      | Ok registry ->

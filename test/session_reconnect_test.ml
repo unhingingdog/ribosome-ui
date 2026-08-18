@@ -4,7 +4,7 @@ let assert_equal label expected actual =
   if expected <> actual then failwith label
 
 let test_reconnect_resends_current_state () =
-  let session = Session.create "session-1" in
+  let session = Session.create ~initial_prompt:"Initial request" "session-1" in
   match Session.reconnect session "connection-1" with
   | Ok (session, Session.Session_state { revision; tree }) ->
     assert_equal "reconnect joins the session" ["connection-1"] session.connections;

@@ -6,7 +6,7 @@ type component_event =
   | Submit of { id: string; values: (string * value) list }
 
 type t =
-  | New_session
+  | New_session of { initial_prompt: string }
   | Resume_session of { session_id: string }
   | Component_event of {
       session_id: string;
@@ -46,6 +46,11 @@ let string = function
 let integer = function
   | `Int value -> Ok value
   | _ -> Error "expected integer"
+
+let initial_prompt = function
+  | `String value when String.trim value <> "" -> Ok value
+  | `String _ -> Error "initialPrompt must not be blank"
+  | _ -> Error "expected string"
 
 let decode_values = function
   | `List values ->
@@ -92,7 +97,10 @@ let decode_event value =
 
 let encode message =
   let fields = ("protocolVersion", `Int protocol_version) :: match message with
-    | New_session -> [("type", `String "newSession")]
+    | New_session { initial_prompt } -> [
+        ("type", `String "newSession");
+        ("initialPrompt", `String initial_prompt);
+      ]
     | Resume_session { session_id } -> [
         ("type", `String "resumeSession");
         ("sessionId", `String session_id);
@@ -118,7 +126,9 @@ let decode value =
   else
     let* type_ = required "type" string fields in
     match type_ with
-    | "newSession" -> Ok New_session
+    | "newSession" ->
+      let* initial_prompt = required "initialPrompt" initial_prompt fields in
+      Ok (New_session { initial_prompt })
     | "resumeSession" ->
       let* session_id = required "sessionId" string fields in
       Ok (Resume_session { session_id })

@@ -3,17 +3,20 @@ let assert_equal label expected actual =
 
 let test_new_session_negotiation () =
   let endpoint = Dream_server.Websocket.create () in
-  match Dream_server.Websocket.negotiate endpoint Dream_protocol.ClientMessage.New_session with
+  match Dream_server.Websocket.negotiate endpoint
+    Dream_protocol.ClientMessage.(New_session { initial_prompt = "Explain this change." }) with
   | Ok { session; connection_id; message = Dream_protocol.ServerMessage.Session_state { revision; tree; _ } } ->
     assert_equal "new sessions receive a stable session ID" "session-1" session.id;
     assert_equal "connections receive a stable connection ID" "connection-1" connection_id;
+    assert_equal "session retains the consumer's first turn input" "Explain this change." session.initial_prompt;
     assert_equal "new sessions begin at revision zero" 0 revision;
     assert_equal "new sessions begin with no generated tree" None tree
   | Ok _ | Error _ -> failwith "expected new session state"
 
 let test_resume_and_disconnect () =
   let endpoint = Dream_server.Websocket.create () in
-  let first = match Dream_server.Websocket.negotiate endpoint Dream_protocol.ClientMessage.New_session with
+  let first = match Dream_server.Websocket.negotiate endpoint
+    Dream_protocol.ClientMessage.(New_session { initial_prompt = "Explain this change." }) with
     | Ok accepted -> accepted
     | Error _ -> failwith "expected new session"
   in
