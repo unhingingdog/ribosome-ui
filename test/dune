@@ -89,3 +89,7 @@
 (test
  (name interrupt_test)
  (libraries codex_client codex_protocol melange-json-native))
+
+(test
+ (name stdio_test)
+ (libraries codex_client lwt.unix))

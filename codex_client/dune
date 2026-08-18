@@ -1,3 +1,3 @@
 (library
  (name codex_client)
- (libraries codex_protocol melange-json-native ribosome_core ribosome_native_codec))
+ (libraries codex_protocol melange-json-native ribosome_core ribosome_native_codec lwt.unix))
