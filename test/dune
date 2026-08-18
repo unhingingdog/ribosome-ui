@@ -77,3 +77,7 @@
 (test
  (name thread_test)
  (libraries codex_client codex_protocol melange-json-native))
+
+(test
+ (name turn_test)
+ (libraries codex_client codex_protocol melange-json-native))
