@@ -3,12 +3,18 @@ type lifecycle =
   | Ready
   | Closed
 
+type generation = {
+  turn: Codex_client.Turn.turn;
+  cancellation_requested: bool;
+}
+
 type t = {
   id: string;
   thread: Codex_client.Thread.thread option;
   tree: Ribosome_core.Types.template option;
   revision: int;
   connections: string list;
+  generation: generation option;
   lifecycle: lifecycle;
 }
 
@@ -24,6 +30,14 @@ type event_error =
   | Unknown_component of string
   | Invalid_component_event
 
+type generation_error =
+  | Generation_session_closed
+  | No_thread
+  | Generation_already_active
+  | No_active_generation
+  | Cancellation_already_requested
+  | Wrong_turn
+
 type accepted_event = {
   event_id: string;
   event: Dream_protocol.ClientMessage.component_event;
@@ -35,6 +49,7 @@ let create id = {
   tree = None;
   revision = 0;
   connections = [];
+  generation = None;
   lifecycle = Starting;
 }
 
@@ -58,6 +73,30 @@ let disconnect session connection_id = {
 }
 
 let close session = { session with lifecycle = Closed; connections = [] }
+
+let start_generation session turn =
+  match session.lifecycle, session.thread, session.generation with
+  | Closed, _, _ -> Error Generation_session_closed
+  | Starting, _, Some _ | Ready, _, Some _ -> Error Generation_already_active
+  | Starting, None, None | Ready, None, None -> Error No_thread
+  | Starting, Some _, None | Ready, Some _, None ->
+    Ok { session with generation = Some { turn; cancellation_requested = false } }
+
+let finish_generation session turn_id =
+  match session.generation with
+  | None -> Error No_active_generation
+  | Some { turn; _ } when turn.id <> turn_id -> Error Wrong_turn
+  | Some _ -> Ok { session with generation = None }
+
+let complete_generation session turn_id = finish_generation session turn_id
+let fail_generation session turn_id = finish_generation session turn_id
+
+let request_cancellation session =
+  match session.generation with
+  | None -> Error No_active_generation
+  | Some { cancellation_requested = true; _ } -> Error Cancellation_already_requested
+  | Some generation ->
+    Ok ({ session with generation = Some { generation with cancellation_requested = true } }, generation.turn)
 
 let rec template_with_id id = function
   | Ribosome_core.Types.Container container ->

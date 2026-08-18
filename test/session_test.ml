@@ -11,6 +11,7 @@ let test_creates_uninitialized_session () =
       tree = None;
       revision = 0;
       connections = [];
+      generation = None;
       lifecycle = Starting;
     }
     (Session.create "session-1")
@@ -25,6 +26,7 @@ let test_attaches_one_codex_thread () =
       tree = None;
       revision = 0;
       connections = [];
+      generation = None;
       lifecycle = Ready;
     })
     (Session.attach_thread session thread)
