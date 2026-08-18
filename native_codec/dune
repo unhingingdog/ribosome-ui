@@ -1,0 +1,4 @@
+(library
+ (name ribosome_native_codec)
+ (libraries ribosome_core yojson)
+ (preprocess (pps melange-json-native.ppx)))

@@ -49,3 +49,7 @@
 (test
  (name validation_test)
  (libraries ribosome_core templates))
+
+(test
+ (name native_codec_test)
+ (libraries ribosome_native_codec ribosome_core templates yojson))
