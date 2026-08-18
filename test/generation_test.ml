@@ -31,11 +31,37 @@ let test_ignores_other_turns () =
 
 let test_routes_completion () =
   assert_equal "completion is correlated by thread and turn"
-    (Ok (Generation.Routed Generation.Completed))
+    (Ok (Generation.Routed (Generation.Turn_finished Generation.Completed)))
     (Generation.route thread turn (notification "turn/completed" (`Assoc [
       ("threadId", `String "thread-1");
-      ("turn", `Assoc [("id", `String "turn-1")]);
+      ("turn", `Assoc [
+        ("id", `String "turn-1");
+        ("status", `String "completed");
+      ]);
     ])))
+
+let test_routes_failed_completion () =
+  assert_equal "failed turns are routed with their server error"
+    (Ok (Generation.Routed (Generation.Turn_finished (Generation.Failed "model failed"))))
+    (Generation.route thread turn (notification "turn/completed" (`Assoc [
+      ("threadId", `String "thread-1");
+      ("turn", `Assoc [
+        ("id", `String "turn-1");
+        ("status", `String "failed");
+        ("error", `Assoc [("message", `String "model failed")]);
+      ]);
+    ])))
+
+let test_rejects_duplicate_completion () =
+  assert_equal "a turn completes once"
+    (Error Generation.Duplicate_completion)
+    (Generation.advance Generation.Finished
+      (Generation.Routed (Generation.Turn_finished Generation.Completed)))
+
+let test_reports_child_exit_during_generation () =
+  assert_equal "a child exit fails an active generation"
+    (Error Generation.Child_exited)
+    (Generation.child_exited Generation.Streaming)
 
 let test_rejects_malformed_delta () =
   assert_equal "matching malformed deltas are not accepted"
@@ -50,4 +76,7 @@ let () =
   test_routes_matching_delta ();
   test_ignores_other_turns ();
   test_routes_completion ();
+  test_routes_failed_completion ();
+  test_rejects_duplicate_completion ();
+  test_reports_child_exit_during_generation ();
   test_rejects_malformed_delta ()

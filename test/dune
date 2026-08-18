@@ -85,3 +85,7 @@
 (test
  (name generation_test)
  (libraries codex_client codex_protocol melange-json-native))
+
+(test
+ (name interrupt_test)
+ (libraries codex_client codex_protocol melange-json-native))
