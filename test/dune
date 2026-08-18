@@ -101,3 +101,7 @@
 (test
  (name server_message_test)
  (libraries dream_protocol melange-json-native ribosome_core ribosome_native_codec templates))
+
+(test
+ (name session_test)
+ (libraries ribosome_session codex_client ribosome_core))
