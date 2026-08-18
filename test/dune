@@ -61,3 +61,7 @@
 (test
  (name json_rpc_test)
  (libraries codex_protocol melange-json-native))
+
+(test
+ (name codex_client_test)
+ (libraries codex_client codex_protocol melange-json-native))
