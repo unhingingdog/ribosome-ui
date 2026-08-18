@@ -400,3 +400,40 @@ This wrapper is where Telomere output becomes a Ribosome template result:
 - hard broken template nodes, hard parser failure, or Telomere corruption become `Failed`.
 
 This keeps Telomere generic while allowing the engine to work in terms of rendered templates.
+
+## Dream + Codex + Ratatui architecture
+
+```mermaid
+flowchart LR
+  User[User]
+  Tui[Ratatui TUI]
+  Dream[Dream server]
+  Session[Dream session state]
+  Stream[Telomere + Ribosome decoder]
+  Rpc[Codex JSON-RPC client]
+  AppServer[codex app-server]
+  Codex[Codex model]
+
+  User -->|terminal input| Tui
+  Tui -->|semantic event: Click / Submit| Dream
+  Dream --> Session
+  Session -->|start turn| Rpc
+  Rpc <-->|JSON-RPC lines on stdin/stdout| AppServer
+  AppServer <--> Codex
+  AppServer -->|assistant text delta| Rpc
+  Rpc --> Stream
+  Stream -->|valid template update| Session
+  Session -->|full template tree| Dream
+  Dream -->|template update| Tui
+  Tui -->|render| User
+
+  subgraph "JSON-RPC line"
+    Request["{ id, method, params }"]
+    Response["{ id, result | error }"]
+    Notification["{ method, params }"]
+  end
+
+  Rpc --- Request
+  Rpc --- Response
+  Rpc --- Notification
+```

@@ -1,0 +1,3 @@
+(library
+ (name codex_protocol)
+ (libraries melange-json-native))

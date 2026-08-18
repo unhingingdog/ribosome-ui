@@ -57,3 +57,7 @@
 (test
  (name incremental_test)
  (libraries ribosome_incremental ribosome_core templates))
+
+(test
+ (name json_rpc_test)
+ (libraries codex_protocol melange-json-native))
