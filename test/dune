@@ -129,3 +129,7 @@
 (test
  (name bootstrap_test)
  (libraries dream_server codex_client lwt.unix))
+
+(test
+ (name websocket_test)
+ (libraries dream_server dream_protocol dream_runtime ribosome_session))
