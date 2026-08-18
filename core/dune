@@ -1,0 +1,4 @@
+(library
+ (name ribosome_core)
+ (modes native melange)
+ (libraries templates))

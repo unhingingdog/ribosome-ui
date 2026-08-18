@@ -37,3 +37,7 @@
 (test
  (name processor_test)
  (libraries telomere))
+
+(test
+ (name reconciler_test)
+ (libraries ribosome_core templates))
