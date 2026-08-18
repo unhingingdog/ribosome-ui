@@ -12,6 +12,18 @@ type error =
   | Unknown_session
   | Session_transition_failed
 
+type dispatch =
+  | Event_accepted of Ribosome_session.Session.accepted_event
+  | Cancellation_requested of Codex_client.Turn.turn
+
+type dispatch_error =
+  | Event_rejected of {
+      session_id: string;
+      event_id: string;
+      reason: string;
+    }
+  | Cancellation_rejected
+
 type accepted = {
   session: Ribosome_session.Session.t;
   connection_id: string;
@@ -72,9 +84,70 @@ let disconnect state session_id connection_id =
 let remove_socket state connection_id =
   state.sockets := Stdlib.List.filter (fun (id, _) -> id <> connection_id) !(state.sockets)
 
+module Port = struct
+  type nonrec t = t
+
+  let send state connection_id message =
+    match Stdlib.List.assoc_opt connection_id !(state.sockets) with
+    | Some websocket -> Dream.send websocket (Dream_protocol.ServerMessage.encode_string message)
+    | None -> Lwt.return_unit
+end
+
+module Broadcast = Dream_runtime.Runtime.Broadcast (Port)
+
+let broadcast state session emission = Broadcast.emission state session emission
+
+let event_reason = function
+  | Ribosome_session.Session.Not_component_event -> "not a component event"
+  | Ribosome_session.Session.Wrong_session -> "wrong session"
+  | Ribosome_session.Session.Stale_revision -> "stale revision"
+  | Ribosome_session.Session.No_template -> "no template"
+  | Ribosome_session.Session.Unknown_component _ -> "unknown component"
+  | Ribosome_session.Session.Invalid_component_event -> "invalid component event"
+  | Ribosome_session.Session.Duplicate_event_id -> "duplicate event ID"
+
+let dispatch state = function
+  | Dream_protocol.ClientMessage.Component_event ({ session_id; event_id; _ } as message) ->
+    (match Dream_runtime.Runtime.find_session !(state.registry) session_id with
+     | None -> Error (Event_rejected { session_id; event_id; reason = "unknown session" })
+     | Some session ->
+       (match Ribosome_session.Session.reduce_event session
+         (Dream_protocol.ClientMessage.Component_event message) with
+        | Error error -> Error (Event_rejected { session_id; event_id; reason = event_reason error })
+        | Ok (session, event) ->
+          (match replace_session state session with
+           | Ok () -> Ok (Event_accepted event)
+           | Error _ -> Error (Event_rejected { session_id; event_id; reason = "session transition failed" }))))
+  | Dream_protocol.ClientMessage.Cancel { session_id } ->
+    (match Dream_runtime.Runtime.find_session !(state.registry) session_id with
+     | None -> Error Cancellation_rejected
+     | Some session ->
+       (match Ribosome_session.Session.request_cancellation session with
+        | Error _ -> Error Cancellation_rejected
+        | Ok (session, turn) ->
+          (match replace_session state session with
+           | Ok () -> Ok (Cancellation_requested turn)
+           | Error _ -> Error Cancellation_rejected)))
+  | Dream_protocol.ClientMessage.New_session _
+  | Dream_protocol.ClientMessage.Resume_session _ -> Error Cancellation_rejected
+
 let rec drain state session_id connection_id websocket =
   Dream.receive websocket >>= function
-  | Some _ -> drain state session_id connection_id websocket
+  | Some line ->
+    (match Dream_protocol.ClientMessage.decode_string line with
+     | Error _ -> Dream.close_websocket ~code:1008 websocket
+     | Ok message ->
+       (match dispatch state message with
+        | Ok (Event_accepted _ | Cancellation_requested _) -> drain state session_id connection_id websocket
+        | Error (Event_rejected rejection) ->
+          Dream.send websocket (Dream_protocol.ServerMessage.encode_string
+            (Dream_protocol.ServerMessage.Event_rejected {
+              session_id = rejection.session_id;
+              event_id = rejection.event_id;
+              reason = rejection.reason;
+            })) >>= fun () ->
+          drain state session_id connection_id websocket
+        | Error Cancellation_rejected -> Dream.close_websocket ~code:1008 websocket))
   | None ->
     remove_socket state connection_id;
     disconnect state session_id connection_id;

@@ -39,7 +39,28 @@ let test_rejects_events_before_negotiation () =
     (Error Dream_server.Websocket.Invalid_initial_message)
     (Dream_server.Websocket.negotiate endpoint (Dream_protocol.ClientMessage.Cancel { session_id = "session-1" }))
 
+let test_dispatches_semantic_events () =
+  let endpoint = Dream_server.Websocket.create () in
+  let accepted = match Dream_server.Websocket.negotiate endpoint
+    Dream_protocol.ClientMessage.(New_session { initial_prompt = "Explain this change." }) with
+    | Ok accepted -> accepted
+    | Error _ -> failwith "expected new session"
+  in
+  assert_equal "semantic events reduce against the session state"
+    (Error (Dream_server.Websocket.Event_rejected {
+      session_id = "session-1";
+      event_id = "event-1";
+      reason = "no template";
+    }))
+    (Dream_server.Websocket.dispatch endpoint Dream_protocol.ClientMessage.(Component_event {
+      session_id = accepted.session.id;
+      event_id = "event-1";
+      base_revision = 0;
+      event = Click { id = "save" };
+    }))
+
 let () =
   test_new_session_negotiation ();
   test_resume_and_disconnect ();
-  test_rejects_events_before_negotiation ()
+  test_rejects_events_before_negotiation ();
+  test_dispatches_semantic_events ()
