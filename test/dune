@@ -9,3 +9,7 @@
 (test
  (name prompt_test)
  (modules TemplateDefinitionTypes TemplateRegistry Prompt prompt_test))
+
+(test
+ (name processor_test)
+ (libraries telomere))
