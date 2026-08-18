@@ -1,0 +1,3 @@
+(library
+ (name dream_runtime)
+ (libraries codex_client dream_protocol ribosome_session lwt))

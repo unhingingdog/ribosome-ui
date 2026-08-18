@@ -121,3 +121,7 @@
 (test
  (name session_reconnect_test)
  (libraries ribosome_session))
+
+(test
+ (name runtime_test)
+ (libraries dream_runtime dream_protocol ribosome_session ribosome_core templates lwt.unix))
