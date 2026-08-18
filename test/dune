@@ -93,3 +93,7 @@
 (test
  (name stdio_test)
  (libraries codex_client lwt.unix))
+
+(test
+ (name client_message_test)
+ (libraries dream_protocol melange-json-native ribosome_core))

@@ -1,0 +1,3 @@
+(library
+ (name dream_protocol)
+ (libraries melange-json-native ribosome_core))
