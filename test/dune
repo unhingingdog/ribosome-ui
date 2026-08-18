@@ -41,3 +41,7 @@
 (test
  (name reconciler_test)
  (libraries ribosome_core templates))
+
+(test
+ (name traversal_test)
+ (libraries ribosome_core templates))
