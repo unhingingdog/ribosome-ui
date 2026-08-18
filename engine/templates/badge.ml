@@ -1,5 +1,3 @@
-open Melange_json.Primitives
-
 type badge_variant = Neutral | Success | Warning | Error | Info
 
 let badge_variant_of_string = function
@@ -8,12 +6,14 @@ let badge_variant_of_string = function
   | "Warning" -> Warning
   | "Error" -> Error
   | "Info" -> Info
-  | v -> failwith ("unknown badge variant: " ^ v)
+  | value -> failwith ("unknown badge variant: " ^ value)
 
-let deserialise_badge_variant json =
-  match Js.Json.decodeString json with
-  | Some s -> badge_variant_of_string s
-  | None -> failwith "expected badge variant string"
+let string_of_badge_variant = function
+  | Neutral -> "Neutral"
+  | Success -> "Success"
+  | Warning -> "Warning"
+  | Error -> "Error"
+  | Info -> "Info"
 
 type t = {
   kind: string;
@@ -21,28 +21,6 @@ type t = {
   label: string;
   variant: badge_variant;
 }
-
-let deserialise json =
-  let open Melange_json.Of_json in
-  {
-    kind = field "kind" string json;
-    id = field "id" string json;
-    label = field "label" string json;
-    variant = field "variant" deserialise_badge_variant json;
-  }
-
-let serialise (template: t) =
-  Js.Json.object_ (Js.Dict.fromList [
-    ("kind", string_to_json template.kind);
-    ("id", string_to_json template.id);
-    ("label", string_to_json template.label);
-    ("variant", string_to_json (match template.variant with
-      | Neutral -> "Neutral"
-      | Success -> "Success"
-      | Warning -> "Warning"
-      | Error -> "Error"
-      | Info -> "Info"));
-  ])
 
 let definition : TemplateDefinitionTypes.template_definition =
   let open TemplateDefinitionTypes in

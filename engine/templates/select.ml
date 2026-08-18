@@ -1,30 +1,8 @@
 (* TODO: revise low quality AI code *)
-open Melange_json.Primitives
-
 type option_ = {
   value: string;
   label: string;
 }
-
-let deserialise_option json =
-  let open Melange_json.Of_json in
-  {
-    value = field "value" string json;
-    label = field "label" string json;
-  }
-
-let serialise_option (option_: option_) =
-  Js.Json.object_ (Js.Dict.fromList [
-    ("value", string_to_json option_.value);
-    ("label", string_to_json option_.label);
-  ])
-
-let options_of_array arr =
-  let rec loop index result =
-    if index < 0 then result
-    else loop (index - 1) (deserialise_option arr.(index) :: result)
-  in
-  loop (Array.length arr - 1) []
 
 type t = {
   kind: string;
@@ -33,36 +11,6 @@ type t = {
   options: option_ list;
   selected: string option;
 }
-
-let deserialise json =
-  let open Melange_json.Of_json in
-  {
-    kind = field "kind" string json;
-    id = field "id" string json;
-    label = field "label" string json;
-    options =
-      field "options" (fun j ->
-        match Js.Json.decodeArray j with
-        | Some arr -> options_of_array arr
-        | None -> failwith "expected options array"
-      ) json;
-    selected = Helpers.optional_field "selected" string json;
-  }
-
-let serialise (select: t) selected =
-  let base = [
-    ("kind", string_to_json select.kind);
-    ("id", string_to_json select.id);
-    ("label", string_to_json select.label);
-    ("options", list_to_json serialise_option select.options);
-  ] in
-  let fields =
-    match selected with
-    | Some selected -> base @ [("selected", string_to_json selected)]
-    | None -> base
-  in
-  Js.Json.object_ (Js.Dict.fromList fields)
-
 
 let definition : TemplateDefinitionTypes.template_definition =
   let open TemplateDefinitionTypes in

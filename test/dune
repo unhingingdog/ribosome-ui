@@ -1,6 +1,18 @@
 (copy_files ../engine/State.ml)
 (copy_files ../engine/TemplateDefinitionTypes.ml)
 (copy_files ../engine/Prompt.ml)
+(copy_files ../engine/templates/container.ml)
+(copy_files ../engine/templates/input.ml)
+(copy_files ../engine/templates/text.ml)
+(copy_files ../engine/templates/image.ml)
+(copy_files ../engine/templates/button.ml)
+(copy_files ../engine/templates/select.ml)
+(copy_files ../engine/templates/submittable.ml)
+(copy_files ../engine/templates/badge.ml)
+(copy_files ../engine/templates/list.ml)
+(copy_files ../engine/templates/stat.ml)
+(copy_files ../engine/templates/divider.ml)
+(copy_files ../engine/templates/broken.ml)
 
 (test
  (name state_test)
@@ -9,6 +21,18 @@
 (test
  (name prompt_test)
  (modules TemplateDefinitionTypes TemplateRegistry Prompt prompt_test))
+
+(test
+ (name container_test)
+ (modules TemplateDefinitionTypes Container container_test))
+
+(test
+ (name input_test)
+ (modules TemplateDefinitionTypes Input input_test))
+
+(test
+ (name template_models_test)
+ (modules TemplateDefinitionTypes Input Text Image Button Select Submittable Badge List Stat Divider Broken template_models_test))
 
 (test
  (name processor_test)

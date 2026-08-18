@@ -1,33 +1,9 @@
-open Melange_json.Primitives
-
 type 'template t = {
   kind: string;
   id: string;
   ordered: bool option;
   children: 'template list;
 }
-
-let deserialise json =
-  let open Melange_json.Of_json in
-  {
-    kind = field "kind" string json;
-    id = field "id" string json;
-    ordered = Helpers.optional_field "ordered" bool json;
-    children = [];
-  }
-
-let serialise template child_serialiser =
-  let base = [
-    ("kind", string_to_json template.kind);
-    ("id", string_to_json template.id);
-    ("children", list_to_json child_serialiser template.children);
-  ] in
-  let fields =
-    match template.ordered with
-    | Some ordered -> base @ [("ordered", bool_to_json ordered)]
-    | None -> base
-  in
-  Js.Json.object_ (Js.Dict.fromList fields)
 
 let definition : TemplateDefinitionTypes.template_definition =
   let open TemplateDefinitionTypes in
