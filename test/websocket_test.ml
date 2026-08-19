@@ -59,8 +59,37 @@ let test_dispatches_semantic_events () =
       event = Click { id = "save" };
     }))
 
+let test_starts_initial_turn_when_codex_is_available () =
+  let app_server = Codex_client.Stdio.command "/bin/sh" [
+    "-c";
+    "read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"userAgent\":\"codex\",\"codexHome\":\"/tmp/codex\",\"platformFamily\":\"unix\",\"platformOs\":\"macos\"}}'; read line; read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}'; read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"data\":[{\"cwd\":\"/opt/ribosome\",\"skills\":[{\"name\":\"ribosome\",\"description\":\"Generate UI\",\"path\":\"/opt/ribosome/skills/ribosome/SKILL.md\",\"enabled\":true}],\"errors\":[]}]}}'; read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'; read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":5,\"result\":{\"turn\":{\"id\":\"turn-1\"}}}'";
+  ] in
+  let ready = match Lwt_main.run (Dream_server.Bootstrap.start Dream_server.Bootstrap.{
+    interface = "127.0.0.1";
+    port = 9010;
+    codex_command = app_server;
+    skill_root = "/opt/ribosome/skills";
+    cwd = "/opt/ribosome";
+  }) with
+    | Ok ready -> ready
+    | Error _ -> failwith "expected bootstrap"
+  in
+  let endpoint = Dream_server.Websocket.create ~ready () in
+  let accepted = match Dream_server.Websocket.negotiate endpoint
+    Dream_protocol.ClientMessage.(New_session { initial_prompt = "Explain this change." }) with
+    | Ok accepted -> accepted
+    | Error _ -> failwith "expected new session"
+  in
+  match Lwt_main.run (Dream_server.Websocket.start_initial_turn endpoint accepted.session.id) with
+  | Ok (session, Dream_protocol.ServerMessage.Generation_started { turn_id; _ }) ->
+    assert_equal "the initial prompt starts a Codex generation" "turn-1" turn_id;
+    assert_equal "the active generation remains session-owned" true (Option.is_some session.generation);
+    ignore (Lwt_main.run (Codex_client.Stdio.shutdown ready.process))
+  | Ok _ | Error _ -> failwith "expected initial generation"
+
 let () =
   test_new_session_negotiation ();
   test_resume_and_disconnect ();
   test_rejects_events_before_negotiation ();
-  test_dispatches_semantic_events ()
+  test_dispatches_semantic_events ();
+  test_starts_initial_turn_when_codex_is_available ()

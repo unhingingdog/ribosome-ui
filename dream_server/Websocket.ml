@@ -3,6 +3,7 @@ open Lwt.Infix
 type t = {
   registry: Dream_runtime.Runtime.registry ref;
   sockets: (string * Dream.websocket) list ref;
+  ready: Bootstrap.ready option ref;
   mutable next_session_id: int;
   mutable next_connection_id: int;
 }
@@ -30,9 +31,10 @@ type accepted = {
   message: Dream_protocol.ServerMessage.t;
 }
 
-let create () = {
+let create ?ready () = {
   registry = ref Dream_runtime.Runtime.empty_registry;
   sockets = ref [];
+  ready = ref ready;
   next_session_id = 1;
   next_connection_id = 1;
 }
@@ -96,6 +98,22 @@ end
 module Broadcast = Dream_runtime.Runtime.Broadcast (Port)
 
 let broadcast state session emission = Broadcast.emission state session emission
+
+let start_initial_turn state session_id =
+  match !(state.ready), Dream_runtime.Runtime.find_session !(state.registry) session_id with
+  | None, _ | _, None -> Lwt.return (Error Session_transition_failed)
+  | Some ready, Some session ->
+    FirstTurn.start ready session >|= function
+    | Error _ -> Error Session_transition_failed
+    | Ok (ready, session) ->
+      state.ready := Some ready;
+      (match replace_session state session, session.generation with
+       | Ok (), Some { turn; _ } ->
+         Ok (session, Dream_protocol.ServerMessage.Generation_started {
+           session_id = session.id;
+           turn_id = turn.id;
+         })
+       | Error _, _ | Ok (), None -> Error Session_transition_failed)
 
 let event_reason = function
   | Ribosome_session.Session.Not_component_event -> "not a component event"
@@ -166,6 +184,17 @@ let handler state _ =
          | Ok accepted ->
            state.sockets := (accepted.connection_id, websocket) :: !(state.sockets);
            Dream.send websocket (Dream_protocol.ServerMessage.encode_string accepted.message) >>= fun () ->
-           drain state accepted.session.id accepted.connection_id websocket))
+           (match message, !(state.ready) with
+            | Dream_protocol.ClientMessage.New_session _, Some _ ->
+              start_initial_turn state accepted.session.id >>= (function
+                | Ok (_, generation_started) ->
+                  Dream.send websocket (Dream_protocol.ServerMessage.encode_string generation_started)
+                | Error _ -> Dream.close_websocket ~code:1011 websocket) >>= fun () ->
+              drain state accepted.session.id accepted.connection_id websocket
+            | Dream_protocol.ClientMessage.New_session _, None
+            | Dream_protocol.ClientMessage.Resume_session _, _ ->
+              drain state accepted.session.id accepted.connection_id websocket
+            | Dream_protocol.ClientMessage.Component_event _, _
+            | Dream_protocol.ClientMessage.Cancel _, _ -> Dream.close_websocket ~code:1008 websocket)))
 
 let route state = Dream.get "/v1/tui" (handler state)
