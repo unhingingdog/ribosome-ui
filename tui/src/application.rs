@@ -1,5 +1,7 @@
+use std::collections::BTreeMap;
+
 use crate::{
-    Template,
+    FormField, InputValue, Template,
     protocol::{ServerEnvelope, ServerMessage},
 };
 
@@ -8,6 +10,7 @@ pub struct Model {
     pub session: Option<Session>,
     pub generation: GenerationState,
     pub rejection: Option<EventRejection>,
+    pub local: BTreeMap<String, WidgetState>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -37,6 +40,12 @@ pub struct EventRejection {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub enum WidgetState {
+    Input { value: String, cursor: usize },
+    Select { selected: Option<String> },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Message {
     Server(ServerEnvelope),
     Terminal(TerminalEvent),
@@ -63,6 +72,7 @@ fn reduce_server(message: ServerMessage, model: &mut Model) {
             revision,
             tree,
         } => {
+            model.local = local_state_for_tree(tree.as_ref(), &model.local);
             model.session = Some(Session {
                 id: session_id,
                 revision,
@@ -76,12 +86,15 @@ fn reduce_server(message: ServerMessage, model: &mut Model) {
             revision,
             tree,
         } => {
+            let current_local = model.local.clone();
             if let Some(session) = &mut model.session
                 && session.id == session_id
                 && revision >= session.revision
             {
                 session.revision = revision;
                 session.tree = Some(tree);
+                let next_local = local_state_for_tree(session.tree.as_ref(), &current_local);
+                model.local = next_local;
             }
         }
         ServerMessage::GenerationStarted {
@@ -129,14 +142,80 @@ fn active_turn_matches(model: &Model, turn_id: &str) -> bool {
     matches!(&model.generation, GenerationState::Active { turn_id: active } if active == turn_id)
 }
 
+fn local_state_for_tree(
+    tree: Option<&Template>,
+    current: &BTreeMap<String, WidgetState>,
+) -> BTreeMap<String, WidgetState> {
+    let mut next = BTreeMap::new();
+
+    if let Some(tree) = tree {
+        collect_local_state(tree, current, &mut next);
+    }
+
+    next
+}
+
+fn collect_local_state(
+    template: &Template,
+    current: &BTreeMap<String, WidgetState>,
+    next: &mut BTreeMap<String, WidgetState>,
+) {
+    match template {
+        Template::Text { .. } => {}
+        Template::Container { children, .. } => {
+            for child in children {
+                collect_local_state(child, current, next);
+            }
+        }
+        Template::Submittable { fields, .. } => {
+            for field in fields {
+                match field {
+                    FormField::Input(input) => {
+                        let state = match current.get(&input.id) {
+                            Some(WidgetState::Input { value, cursor }) => WidgetState::Input {
+                                value: value.clone(),
+                                cursor: *cursor,
+                            },
+                            Some(WidgetState::Select { .. }) | None => WidgetState::Input {
+                                value: input_value(input.value.as_ref()),
+                                cursor: 0,
+                            },
+                        };
+                        next.insert(input.id.clone(), state);
+                    }
+                    FormField::Select(select) => {
+                        let state = match current.get(&select.id) {
+                            Some(WidgetState::Select { selected }) => WidgetState::Select {
+                                selected: selected.clone(),
+                            },
+                            Some(WidgetState::Input { .. }) | None => WidgetState::Select {
+                                selected: select.selected.clone(),
+                            },
+                        };
+                        next.insert(select.id.clone(), state);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn input_value(value: Option<&InputValue>) -> String {
+    match value {
+        Some(InputValue::String(value)) => value.clone(),
+        Some(InputValue::Integer(value)) => value.to_string(),
+        None => String::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
-        Direction, Template,
+        Direction, FormField, Input, Select, Template,
         protocol::{ProtocolVersion, ServerEnvelope, ServerMessage},
     };
 
-    use super::{GenerationState, Message, Model, Session, update};
+    use super::{GenerationState, Message, Model, Session, WidgetState, update};
 
     fn server(message: ServerMessage) -> Message {
         Message::Server(ServerEnvelope {
@@ -225,5 +304,80 @@ mod tests {
         .0;
 
         assert_eq!(completed.generation, GenerationState::Idle);
+    }
+
+    #[test]
+    fn template_updates_preserve_compatible_widget_state() {
+        let initial_tree = Template::Submittable {
+            id: String::from("form"),
+            fields: vec![
+                FormField::Input(Input {
+                    id: String::from("answer"),
+                    value: Some(crate::InputValue::String(String::from("Generated"))),
+                }),
+                FormField::Select(Select {
+                    id: String::from("choice"),
+                    label: String::from("Choice"),
+                    options: Vec::new(),
+                    selected: Some(String::from("one")),
+                }),
+            ],
+            button: None,
+        };
+        let mut model = update(
+            server(ServerMessage::SessionState {
+                session_id: String::from("session-1"),
+                revision: 1,
+                tree: Some(initial_tree),
+            }),
+            Model::default(),
+        )
+        .0;
+        model.local.insert(
+            String::from("answer"),
+            WidgetState::Input {
+                value: String::from("Edited"),
+                cursor: 3,
+            },
+        );
+
+        let next_tree = Template::Submittable {
+            id: String::from("form"),
+            fields: vec![
+                FormField::Input(Input {
+                    id: String::from("answer"),
+                    value: Some(crate::InputValue::String(String::from("Replacement"))),
+                }),
+                FormField::Input(Input {
+                    id: String::from("choice"),
+                    value: None,
+                }),
+            ],
+            button: None,
+        };
+        let updated = update(
+            server(ServerMessage::TemplateUpdate {
+                session_id: String::from("session-1"),
+                revision: 2,
+                tree: next_tree,
+            }),
+            model,
+        )
+        .0;
+
+        assert_eq!(
+            updated.local.get("answer"),
+            Some(&WidgetState::Input {
+                value: String::from("Edited"),
+                cursor: 3,
+            })
+        );
+        assert_eq!(
+            updated.local.get("choice"),
+            Some(&WidgetState::Input {
+                value: String::new(),
+                cursor: 0,
+            })
+        );
     }
 }
