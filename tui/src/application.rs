@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::{
     FormField, InputValue, Template,
+    protocol::{ComponentEvent, SubmittedValue},
     protocol::{ServerEnvelope, ServerMessage},
 };
 
@@ -64,11 +65,23 @@ pub enum TerminalEvent {
     FocusNext,
     FocusPrevious,
     Activate,
+    Input(InputEvent),
+    SelectNext,
+    SelectPrevious,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum InputEvent {
+    Insert(char),
+    CursorLeft,
+    CursorRight,
+    Backspace,
+    Delete,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Effect {
-    Activate { id: String },
+    ComponentEvent(ComponentEvent),
 }
 
 pub fn update(message: Message, mut model: Model) -> (Model, Vec<Effect>) {
@@ -172,14 +185,23 @@ fn reduce_terminal(event: TerminalEvent, mut model: Model) -> (Model, Vec<Effect
             (model, Vec::new())
         }
         TerminalEvent::Activate => {
-            let effect = match &model.focus {
-                FocusState::Focused(id) => Some(Effect::Activate { id: id.clone() }),
-                FocusState::None => None,
-            };
+            let effect = submit_focused_form(&model);
             match effect {
                 Some(effect) => (model, vec![effect]),
                 None => (model, Vec::new()),
             }
+        }
+        TerminalEvent::Input(event) => {
+            edit_focused_input(&mut model, event);
+            (model, Vec::new())
+        }
+        TerminalEvent::SelectNext => {
+            select_focused_option(&mut model, true);
+            (model, Vec::new())
+        }
+        TerminalEvent::SelectPrevious => {
+            select_focused_option(&mut model, false);
+            (model, Vec::new())
         }
     }
 }
@@ -245,6 +267,166 @@ fn collect_focusable_ids(template: &Template, order: &mut Vec<String>) {
                 order.push(button.id.clone());
             }
         }
+    }
+}
+
+fn edit_focused_input(model: &mut Model, event: InputEvent) {
+    let id = match &model.focus {
+        FocusState::Focused(id) => id,
+        FocusState::None => return,
+    };
+    let Some(WidgetState::Input { value, cursor }) = model.local.get_mut(id) else {
+        return;
+    };
+    let length = value.chars().count();
+
+    match event {
+        InputEvent::Insert(character) => {
+            let index = byte_index(value, *cursor);
+            value.insert(index, character);
+            *cursor += 1;
+        }
+        InputEvent::CursorLeft if *cursor > 0 => *cursor -= 1,
+        InputEvent::CursorRight if *cursor < length => *cursor += 1,
+        InputEvent::Backspace if *cursor > 0 => {
+            let end = byte_index(value, *cursor);
+            *cursor -= 1;
+            let start = byte_index(value, *cursor);
+            value.replace_range(start..end, "");
+        }
+        InputEvent::Delete if *cursor < length => {
+            let start = byte_index(value, *cursor);
+            let end = byte_index(value, *cursor + 1);
+            value.replace_range(start..end, "");
+        }
+        InputEvent::CursorLeft
+        | InputEvent::CursorRight
+        | InputEvent::Backspace
+        | InputEvent::Delete => {}
+    }
+}
+
+fn byte_index(value: &str, character_index: usize) -> usize {
+    value
+        .char_indices()
+        .nth(character_index)
+        .map(|(index, _)| index)
+        .unwrap_or(value.len())
+}
+
+fn select_focused_option(model: &mut Model, forward: bool) {
+    let id = match &model.focus {
+        FocusState::Focused(id) => id.clone(),
+        FocusState::None => return,
+    };
+    let options = select_option_values(model, &id);
+    let Some(WidgetState::Select { selected }) = model.local.get_mut(&id) else {
+        return;
+    };
+    if options.is_empty() {
+        return;
+    }
+
+    let index = selected
+        .as_ref()
+        .and_then(|selected| options.iter().position(|option| option == selected));
+    let next = match (index, forward) {
+        (Some(index), true) => (index + 1) % options.len(),
+        (Some(0), false) => options.len() - 1,
+        (Some(index), false) => index - 1,
+        (None, true) => 0,
+        (None, false) => options.len() - 1,
+    };
+    *selected = Some(options[next].clone());
+}
+
+fn select_option_values(model: &Model, id: &str) -> Vec<String> {
+    model
+        .session
+        .as_ref()
+        .and_then(|session| session.tree.as_ref())
+        .and_then(|tree| find_select(tree, id))
+        .map(|select| {
+            select
+                .options
+                .iter()
+                .map(|option| option.value.clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn find_select<'a>(template: &'a Template, id: &str) -> Option<&'a crate::Select> {
+    match template {
+        Template::Text { .. } => None,
+        Template::Container { children, .. } => {
+            children.iter().find_map(|child| find_select(child, id))
+        }
+        Template::Submittable { fields, .. } => fields.iter().find_map(|field| match field {
+            FormField::Input(_) => None,
+            FormField::Select(select) if select.id == id => Some(select),
+            FormField::Select(_) => None,
+        }),
+    }
+}
+
+fn submit_focused_form(model: &Model) -> Option<Effect> {
+    let id = match &model.focus {
+        FocusState::Focused(id) => id,
+        FocusState::None => return None,
+    };
+    let tree = model.session.as_ref()?.tree.as_ref()?;
+    find_submit_event(tree, id, &model.local).map(Effect::ComponentEvent)
+}
+
+fn find_submit_event(
+    template: &Template,
+    focused_id: &str,
+    local: &BTreeMap<String, WidgetState>,
+) -> Option<ComponentEvent> {
+    match template {
+        Template::Text { .. } => None,
+        Template::Container { children, .. } => children
+            .iter()
+            .find_map(|child| find_submit_event(child, focused_id, local)),
+        Template::Submittable { id, fields, button } => match button {
+            Some(button) if button.id == focused_id && !button.disabled.unwrap_or(false) => {
+                Some(ComponentEvent::Submit {
+                    id: id.clone(),
+                    values: fields
+                        .iter()
+                        .filter_map(|field| submitted_value(field, local))
+                        .collect(),
+                })
+            }
+            Some(_) | None => None,
+        },
+    }
+}
+
+fn submitted_value(
+    field: &FormField,
+    local: &BTreeMap<String, WidgetState>,
+) -> Option<SubmittedValue> {
+    match field {
+        FormField::Input(input) => match local.get(&input.id) {
+            Some(WidgetState::Input { value, .. }) => Some(SubmittedValue {
+                id: input.id.clone(),
+                value: InputValue::String(value.clone()),
+            }),
+            Some(WidgetState::Select { .. }) | None => None,
+        },
+        FormField::Select(select) => match local.get(&select.id) {
+            Some(WidgetState::Select {
+                selected: Some(value),
+            }) => Some(SubmittedValue {
+                id: select.id.clone(),
+                value: InputValue::String(value.clone()),
+            }),
+            Some(WidgetState::Select { selected: None })
+            | Some(WidgetState::Input { .. })
+            | None => None,
+        },
     }
 }
 
@@ -325,13 +507,15 @@ fn input_value(value: Option<&InputValue>) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{
-        Button, Direction, FormField, Input, Select, Template,
-        protocol::{ProtocolVersion, ServerEnvelope, ServerMessage},
+        Button, Direction, FormField, Input, InputValue, Select, Template,
+        protocol::{
+            ComponentEvent, ProtocolVersion, ServerEnvelope, ServerMessage, SubmittedValue,
+        },
     };
 
     use super::{
-        Effect, FocusState, GenerationState, Message, Model, Session, TerminalEvent, WidgetState,
-        update,
+        Effect, FocusState, GenerationState, InputEvent, Message, Model, Session, TerminalEvent,
+        WidgetState, update,
     };
 
     fn server(message: ServerMessage) -> Message {
@@ -531,14 +715,81 @@ mod tests {
         )
         .0;
         let focused = update(Message::Terminal(TerminalEvent::FocusNext), model).0;
+        let focused = update(Message::Terminal(TerminalEvent::FocusNext), focused).0;
         let (activated, effects) = update(Message::Terminal(TerminalEvent::Activate), focused);
 
-        assert_eq!(activated.focus, FocusState::Focused(String::from("choice")));
+        assert_eq!(activated.focus, FocusState::Focused(String::from("submit")));
         assert_eq!(
             effects,
-            vec![Effect::Activate {
-                id: String::from("choice"),
-            }]
+            vec![Effect::ComponentEvent(ComponentEvent::Submit {
+                id: String::from("form"),
+                values: vec![SubmittedValue {
+                    id: String::from("answer"),
+                    value: InputValue::String(String::new()),
+                }],
+            })]
+        );
+    }
+
+    #[test]
+    fn terminal_events_edit_inputs_and_select_options() {
+        let tree = Template::Submittable {
+            id: String::from("form"),
+            fields: vec![
+                FormField::Input(Input {
+                    id: String::from("answer"),
+                    value: None,
+                }),
+                FormField::Select(Select {
+                    id: String::from("choice"),
+                    label: String::from("Choice"),
+                    options: vec![
+                        crate::SelectOption {
+                            value: String::from("one"),
+                            label: String::from("One"),
+                        },
+                        crate::SelectOption {
+                            value: String::from("two"),
+                            label: String::from("Two"),
+                        },
+                    ],
+                    selected: None,
+                }),
+            ],
+            button: None,
+        };
+        let model = update(
+            server(ServerMessage::SessionState {
+                session_id: String::from("session-1"),
+                revision: 1,
+                tree: Some(tree),
+            }),
+            Model::default(),
+        )
+        .0;
+        let edited = update(
+            Message::Terminal(TerminalEvent::Input(InputEvent::Insert('é'))),
+            model,
+        )
+        .0;
+        let selected = update(
+            Message::Terminal(TerminalEvent::SelectNext),
+            update(Message::Terminal(TerminalEvent::FocusNext), edited).0,
+        )
+        .0;
+
+        assert_eq!(
+            selected.local.get("answer"),
+            Some(&WidgetState::Input {
+                value: String::from("é"),
+                cursor: 1,
+            })
+        );
+        assert_eq!(
+            selected.local.get("choice"),
+            Some(&WidgetState::Select {
+                selected: Some(String::from("one")),
+            })
         );
     }
 }
