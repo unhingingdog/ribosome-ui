@@ -210,8 +210,16 @@ impl Drop for TerminalGuard {
 #[cfg(test)]
 mod tests {
     use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+    use ratatui::{Terminal, backend::TestBackend};
 
-    use crate::application::{InputEvent, Message, Model, TerminalEvent};
+    use crate::{
+        Button, FormField, Input, Template,
+        application::{Effect, InputEvent, Message, Model, TerminalEvent, update},
+        component_registry::{ComponentRegistry, Registry, RenderContext},
+        protocol::{
+            ComponentEvent, ProtocolVersion, ServerEnvelope, ServerMessage, SubmittedValue,
+        },
+    };
 
     use super::terminal_message;
 
@@ -244,6 +252,74 @@ mod tests {
         assert_eq!(
             terminal_message(key, &Model::default()),
             Some(Message::Terminal(TerminalEvent::FocusNext))
+        );
+    }
+
+    #[test]
+    fn renders_dream_state_and_emits_a_submit_from_terminal_interaction() {
+        let tree = Template::Submittable {
+            id: String::from("form"),
+            fields: vec![FormField::Input(Input {
+                id: String::from("answer"),
+                value: None,
+            })],
+            button: Some(Button {
+                id: String::from("submit"),
+                label: String::from("Submit"),
+                action: String::from("Submit"),
+                disabled: None,
+            }),
+        };
+        let model = update(
+            Message::Server(ServerEnvelope {
+                protocol_version: ProtocolVersion::V1,
+                message: ServerMessage::SessionState {
+                    session_id: String::from("session-1"),
+                    revision: 1,
+                    tree: Some(tree),
+                },
+            }),
+            Model::default(),
+        )
+        .0;
+        let model = update(
+            Message::Terminal(TerminalEvent::Input(InputEvent::Insert('A'))),
+            model,
+        )
+        .0;
+        let model = update(Message::Terminal(TerminalEvent::FocusNext), model).0;
+        let (model, effects) = update(Message::Terminal(TerminalEvent::Activate), model);
+        let mut terminal = Terminal::new(TestBackend::new(12, 2)).expect("test terminal");
+
+        terminal
+            .draw(|frame| {
+                let tree = model
+                    .session
+                    .as_ref()
+                    .and_then(|session| session.tree.as_ref())
+                    .expect("Dream tree");
+                Registry.render(
+                    tree,
+                    &RenderContext {
+                        local: &model.local,
+                        focus: &model.focus,
+                    },
+                    frame.area(),
+                    frame.buffer_mut(),
+                );
+            })
+            .expect("rendered test terminal");
+
+        assert_eq!(terminal.backend().buffer()[(2, 0)].symbol(), "A");
+        assert_eq!(
+            effects,
+            vec![Effect::ComponentEvent(ComponentEvent::Submit {
+                id: String::from("form"),
+                values: vec![SubmittedValue {
+                    id: String::from("answer"),
+                    value: crate::InputValue::String(String::from("A")),
+                }],
+            })]
         );
     }
 }

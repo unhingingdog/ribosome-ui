@@ -119,7 +119,11 @@ let start_generation session turn =
   | Starting, _, Some _ | Ready, _, Some _ -> Error Generation_already_active
   | Starting, None, None | Ready, None, None -> Error No_thread
   | Starting, Some _, None | Ready, Some _, None ->
-    Ok { session with generation = Some { turn; cancellation_requested = false } }
+    Ok {
+      session with
+      generation = Some { turn; cancellation_requested = false };
+      stream = Ribosome_incremental.Incremental.create session.tree;
+    }
 
 let finish_generation session turn_id =
   match session.generation with

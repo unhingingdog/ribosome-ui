@@ -95,6 +95,11 @@
  (libraries codex_client lwt.unix))
 
 (test
+ (name scripted_codex_app_server_test)
+ (libraries codex_client lwt.unix)
+ (deps scripted_codex_app_server.sh))
+
+(test
  (name client_message_test)
  (libraries dream_protocol melange-json-native ribosome_core))
 
@@ -132,7 +137,8 @@
 
 (test
  (name websocket_test)
- (libraries dream_server dream_protocol dream_runtime ribosome_session))
+ (libraries dream_server dream_protocol dream_runtime ribosome_session)
+ (deps scripted_codex_app_server.sh))
 
 (test
  (name first_turn_test)

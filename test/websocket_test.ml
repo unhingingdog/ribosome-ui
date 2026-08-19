@@ -160,6 +160,54 @@ let test_pump_starts_follow_up_turns () =
       assert_equal "follow-up click starts another Codex turn" true (Option.is_some session.generation)
     | None -> failwith "expected session"
 
+let test_generation_loop_preserves_valid_tree_after_invalid_delta () =
+  let app_server = Codex_client.Stdio.command "/bin/sh" ["test/scripted_codex_app_server.sh"] in
+  let ready = match Lwt_main.run (Dream_server.Bootstrap.start Dream_server.Bootstrap.{
+    interface = "127.0.0.1"; port = 9010; codex_command = app_server;
+    skill_root = "/opt/ribosome/skills"; cwd = "/opt/ribosome";
+  }) with
+    | Ok ready -> ready
+    | Error _ -> failwith "expected scripted bootstrap"
+  in
+  let endpoint = Dream_server.Websocket.create ~ready () in
+  let accepted = match Dream_server.Websocket.negotiate endpoint
+    Dream_protocol.ClientMessage.(New_session { initial_prompt = "Explain this change." }) with
+    | Ok accepted -> accepted
+    | Error _ -> failwith "expected new session"
+  in
+  (match Lwt_main.run (Dream_server.Websocket.start_initial_turn endpoint accepted.session.id) with
+   | Ok _ -> ()
+   | Error _ -> failwith "expected initial turn");
+  Lwt_main.run (Dream_server.Websocket.pump_once endpoint);
+  Lwt_main.run (Dream_server.Websocket.pump_once endpoint);
+  let session = match Dream_runtime.Runtime.find_session !(endpoint.registry) accepted.session.id with
+    | Some session -> session
+    | None -> failwith "expected streamed session"
+  in
+  assert_equal "initial generation commits the scripted form" 1 session.revision;
+  let event = Dream_protocol.ClientMessage.Click { id = "save" } in
+  (match Dream_server.Websocket.dispatch endpoint Dream_protocol.ClientMessage.(Component_event {
+    session_id = session.id; event_id = "event-1"; base_revision = session.revision; event;
+  }) with
+   | Ok (Dream_server.Websocket.Event_accepted accepted) ->
+     (match Lwt_main.run (Dream_server.Websocket.enqueue_turn endpoint session.id accepted.event) with
+      | Ok () -> ()
+      | Error _ -> failwith "expected follow-up turn")
+   | Ok _ | Error _ -> failwith "expected accepted click");
+  Lwt_main.run (Dream_server.Websocket.pump_once endpoint);
+  Lwt_main.run (Dream_server.Websocket.pump_once endpoint);
+  Lwt_main.run (Dream_server.Websocket.pump_once endpoint);
+  let session = match Dream_runtime.Runtime.find_session !(endpoint.registry) accepted.session.id with
+    | Some session -> session
+    | None -> failwith "expected follow-up session"
+  in
+  assert_equal "follow-up generation commits another complete tree" 2 session.revision;
+  match Ribosome_session.Session.feed_delta session "{\"kind\":\"unknown\"}" with
+  | Ok (next, None) ->
+    assert_equal "invalid model output preserves the last valid tree" session.tree next.tree;
+    ignore (Lwt_main.run (Codex_client.Stdio.shutdown ready.process))
+  | Ok (_, Some _) | Error _ -> failwith "expected invalid delta preservation"
+
 let () =
   test_new_session_negotiation ();
   test_resume_and_disconnect ();
@@ -167,4 +215,5 @@ let () =
   test_dispatches_semantic_events ();
   test_starts_initial_turn_when_codex_is_available ();
   test_pump_commits_streamed_templates ();
-  test_pump_starts_follow_up_turns ()
+  test_pump_starts_follow_up_turns ();
+  test_generation_loop_preserves_valid_tree_after_invalid_delta ()
