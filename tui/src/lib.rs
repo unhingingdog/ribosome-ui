@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+pub mod protocol;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Template {

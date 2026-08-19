@@ -1,6 +1,7 @@
 # Build outputs
 _build/
 _opam/
+/target/
 js/output/
 js/dist/
 js/demo/dist/
