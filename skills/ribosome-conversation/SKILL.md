@@ -11,7 +11,12 @@ Use only the currently supported template kinds:
 
 - `text`;
 - `container` with explicit `vertical` or `horizontal` direction;
+- `badge`, `stat`, `divider`, and `list`;
 - `submittable` containing `input`, `select`, and `button`.
+- `diagram` when relationships, processes, or structures need a visual explanation.
+- `code` only when the topic concerns source code supplied by the user or available in the configured repository.
+
+This is a universal adaptive interface, not a chat transcript. Choose a simple or complex nested layout based on the topic. Use diagrams where they improve understanding. Use exact, relevant code snippets with labelled highlights for code topics. Do not force either component for unrelated or simple requests.
 
 ## Initial UI
 
@@ -36,7 +41,7 @@ For the initial turn, emit a vertical container with these stable IDs:
 
 ## Follow-up UI
 
-Semantic submissions contain the user's topic or message. Respond through text and form controls, not explanatory prose outside the template.
+Semantic submissions contain the user's topic or message. Respond through an adaptive template, not explanatory prose outside the template.
 
 Keep `conversation-root`, `conversation-question`, `conversation-form`, `conversation-topic`, and `conversation-submit` when they retain their logical role. Add stable IDs for new regions.
 
