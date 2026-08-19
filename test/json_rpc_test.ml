@@ -22,6 +22,15 @@ let test_decodes_result_response () =
     (JsonRpc.decode_string_inbound
       "{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"status\":\"ready\"}}")
 
+let test_decodes_codex_response_without_version () =
+  assert_equal "Codex app-server response is correlated by id"
+    (Ok (JsonRpc.Response {
+      id = Some (JsonRpc.Integer 7);
+      result = Ok (`Assoc [("status", `String "ready")]);
+    }))
+    (JsonRpc.decode_string_inbound
+      "{\"id\":7,\"result\":{\"status\":\"ready\"}}")
+
 let test_decodes_error_response () =
   assert_equal "error response is decoded"
     (Ok (JsonRpc.Response {
@@ -49,6 +58,7 @@ let test_rejects_invalid_envelopes () =
 let () =
   test_encodes_request ();
   test_decodes_result_response ();
+  test_decodes_codex_response_without_version ();
   test_decodes_error_response ();
   test_decodes_notification ();
   test_rejects_invalid_envelopes ()

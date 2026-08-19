@@ -21,7 +21,7 @@ let test_starts_restricted_turn () =
   match Turn.start Turn.Idle (Client.create ()) request with
   | Ok (Turn.Requested (Client.Send_line line), _, Turn.Waiting _) ->
     assert_equal "turn includes the skill, semantic input, and restrictions"
-      "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"turn/start\",\"params\":{\"threadId\":\"thread-1\",\"input\":[{\"type\":\"skill\",\"name\":\"ribosome\",\"path\":\"/opt/ribosome/skills/ribosome/SKILL.md\"},{\"type\":\"text\",\"text\":\"Use the ribosome skill. Emit only the requested Ribosome JSON.\\n\\nThere is no existing UI. Generate the initial Ribosome tree.\\n\\nSemantic UI input:\\nCreate a trip planner.\",\"text_elements\":[]}],\"approvalPolicy\":\"never\",\"sandboxPolicy\":\"read-only\"}}"
+      "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"turn/start\",\"params\":{\"threadId\":\"thread-1\",\"input\":[{\"type\":\"skill\",\"name\":\"ribosome\",\"path\":\"/opt/ribosome/skills/ribosome/SKILL.md\"},{\"type\":\"text\",\"text\":\"Use the ribosome skill. Emit only the requested Ribosome JSON.\\n\\nThere is no existing UI. Generate the initial Ribosome tree.\\n\\nSemantic UI input:\\nCreate a trip planner.\",\"text_elements\":[]}],\"approvalPolicy\":\"never\",\"sandboxPolicy\":{\"type\":\"readOnly\",\"networkAccess\":false}}}"
       line
   | Ok _ | Error _ -> failwith "expected turn/start command"
 

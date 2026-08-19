@@ -54,6 +54,7 @@ let decode_int = function
 
 let decode_version fields =
   match Stdlib.List.assoc_opt "jsonrpc" fields with
+  | None -> Ok ()
   | Some (`String "2.0") -> Ok ()
   | _ -> Error "expected JSON-RPC version 2.0"
 

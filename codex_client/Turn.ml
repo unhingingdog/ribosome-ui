@@ -55,7 +55,10 @@ let params request =
       ];
     ]);
     ("approvalPolicy", `String "never");
-    ("sandboxPolicy", `String "read-only");
+    ("sandboxPolicy", `Assoc [
+      ("type", `String "readOnly");
+      ("networkAccess", `Bool false);
+    ]);
   ]
 
 let start phase client request =
