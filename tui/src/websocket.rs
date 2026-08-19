@@ -1,4 +1,4 @@
-use std::net::TcpStream;
+use std::{io::ErrorKind, net::TcpStream};
 
 use tungstenite::{Message, WebSocket, stream::MaybeTlsStream};
 
@@ -21,6 +21,7 @@ pub enum TransportError {
 pub enum ReceiveResult {
     ServerMessage(ServerEnvelope),
     Disconnected,
+    Pending,
     Ignored,
 }
 
@@ -38,11 +39,24 @@ impl DreamConnection {
         event_id: String,
     ) -> Result<(), TransportError> {
         let message = client_message(effect, model, event_id)?;
+        self.send(message)
+    }
+
+    pub fn send(&mut self, message: ClientEnvelope) -> Result<(), TransportError> {
         let encoded = serde_json::to_string(&message).map_err(TransportError::Json)?;
 
         self.socket
             .send(Message::Text(encoded))
             .map_err(|error| TransportError::Websocket(Box::new(error)))
+    }
+
+    pub fn set_nonblocking(&mut self, nonblocking: bool) -> Result<(), TransportError> {
+        match self.socket.get_mut() {
+            MaybeTlsStream::Plain(stream) => stream.set_nonblocking(nonblocking).map_err(|error| {
+                TransportError::Websocket(Box::new(tungstenite::Error::Io(error)))
+            }),
+            _ => Ok(()),
+        }
     }
 
     pub fn receive(&mut self) -> Result<ReceiveResult, TransportError> {
@@ -58,6 +72,15 @@ impl DreamConnection {
             Message::Binary(_) | Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {
                 Ok(ReceiveResult::Ignored)
             }
+        }
+    }
+
+    pub fn try_receive(&mut self) -> Result<ReceiveResult, TransportError> {
+        match self.receive() {
+            Err(TransportError::Websocket(error)) if matches!(error.as_ref(), tungstenite::Error::Io(error) if error.kind() == ErrorKind::WouldBlock) => {
+                Ok(ReceiveResult::Pending)
+            }
+            result => result,
         }
     }
 }

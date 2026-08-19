@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 pub mod application;
 pub mod component_registry;
 pub mod protocol;
+pub mod runtime;
 pub mod websocket;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
