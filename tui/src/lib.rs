@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+pub mod application;
 pub mod protocol;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
