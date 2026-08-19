@@ -6,6 +6,7 @@ type t = {
   ready: Bootstrap.ready option ref;
   mutable pump_running: bool;
   mutable pending_turns: (string * Codex_client.Turn.phase) list;
+  mutable pending_interrupts: (string * Codex_client.Interrupt.phase) list;
   mutable next_session_id: int;
   mutable next_connection_id: int;
 }
@@ -39,6 +40,7 @@ let create ?ready () = {
   ready = ref ready;
   pump_running = false;
   pending_turns = [];
+  pending_interrupts = [];
   next_session_id = 1;
   next_connection_id = 1;
 }
@@ -225,6 +227,27 @@ let handle_pending_turn state event =
   | Codex_client.Client.Unexpected_response _
   | Codex_client.Client.Protocol_error _ -> None
 
+let handle_pending_interrupt state event =
+  match event with
+  | Codex_client.Client.Response { request; _ } ->
+    let matched, retained = Stdlib.List.partition (fun (_, phase) ->
+      match phase with
+      | Codex_client.Interrupt.Waiting id -> id = request.id
+      | Codex_client.Interrupt.Idle
+      | Codex_client.Interrupt.Active
+      | Codex_client.Interrupt.Interrupted -> false
+    ) state.pending_interrupts in
+    state.pending_interrupts <- retained;
+    (match matched, !(state.ready) with
+     | (_, phase) :: _, Some ready ->
+       Some (match Codex_client.Interrupt.receive phase ready.client event with
+         | Ok (Codex_client.Interrupt.Interrupt_confirmed, _, Codex_client.Interrupt.Interrupted) -> Lwt.return_unit
+         | Ok _ | Error _ -> Lwt.return_unit)
+     | [], _ | _, None -> None)
+  | Codex_client.Client.Notification _
+  | Codex_client.Client.Unexpected_response _
+  | Codex_client.Client.Protocol_error _ -> None
+
 let pump_once state =
   match !(state.ready) with
   | None -> Lwt.return_unit
@@ -238,7 +261,10 @@ let pump_once state =
       state.ready := Some { ready with Bootstrap.client };
       (match handle_pending_turn state event with
        | Some handling -> handling
-       | None -> handle_generation_event state event)
+       | None ->
+         (match handle_pending_interrupt state event with
+          | Some handling -> handling
+          | None -> handle_generation_event state event))
 
 let rec pump state =
   if state.pump_running then
@@ -290,6 +316,24 @@ let enqueue_turn state session_id event =
            | Error _ -> Lwt.return (Error Session_transition_failed))
        | Ok _ -> Lwt.return (Error Session_transition_failed))
 
+let enqueue_interrupt state session_id turn =
+  match !(state.ready), Dream_runtime.Runtime.find_session !(state.registry) session_id with
+  | Some ready, Some session ->
+    (match session.thread with
+     | None -> Lwt.return (Error Session_transition_failed)
+     | Some thread ->
+       match Codex_client.Interrupt.start Codex_client.Interrupt.Active ready.client thread turn with
+       | Error _ -> Lwt.return (Error Session_transition_failed)
+       | Ok (Codex_client.Interrupt.Requested command, client, phase) ->
+         state.ready := Some { ready with Bootstrap.client };
+         Bootstrap.send ready.process command >>= (function
+           | Ok () ->
+             state.pending_interrupts <- (session_id, phase) :: state.pending_interrupts;
+             Lwt.return (Ok ())
+           | Error _ -> Lwt.return (Error Session_transition_failed))
+       | Ok _ -> Lwt.return (Error Session_transition_failed))
+  | None, _ | _, None -> Lwt.return (Error Session_transition_failed)
+
 let dispatch state = function
   | Dream_protocol.ClientMessage.Component_event ({ session_id; event_id; _ } as message) ->
     (match Dream_runtime.Runtime.find_session !(state.registry) session_id with
@@ -326,7 +370,10 @@ let rec drain state session_id connection_id websocket =
           (if starts_turn accepted.event then enqueue_turn state session_id accepted.event else Lwt.return (Ok ())) >>= (function
             | Ok () -> drain state session_id connection_id websocket
             | Error _ -> Dream.close_websocket ~code:1011 websocket)
-        | Ok (Cancellation_requested _) -> drain state session_id connection_id websocket
+        | Ok (Cancellation_requested turn) ->
+          enqueue_interrupt state session_id turn >>= (function
+            | Ok () -> drain state session_id connection_id websocket
+            | Error _ -> Dream.close_websocket ~code:1011 websocket)
         | Error (Event_rejected rejection) ->
           Dream.send websocket (Dream_protocol.ServerMessage.encode_string
             (Dream_protocol.ServerMessage.Event_rejected {
