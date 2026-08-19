@@ -11,6 +11,7 @@ pub struct Model {
     pub generation: GenerationState,
     pub rejection: Option<EventRejection>,
     pub local: BTreeMap<String, WidgetState>,
+    pub focus: FocusState,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -39,6 +40,13 @@ pub struct EventRejection {
     pub reason: String,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum FocusState {
+    #[default]
+    None,
+    Focused(String),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WidgetState {
     Input { value: String, cursor: usize },
@@ -52,17 +60,25 @@ pub enum Message {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TerminalEvent;
+pub enum TerminalEvent {
+    FocusNext,
+    FocusPrevious,
+    Activate,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Effect {}
+pub enum Effect {
+    Activate { id: String },
+}
 
 pub fn update(message: Message, mut model: Model) -> (Model, Vec<Effect>) {
-    if let Message::Server(envelope) = message {
-        reduce_server(envelope.message, &mut model);
+    match message {
+        Message::Server(envelope) => {
+            reduce_server(envelope.message, &mut model);
+            (model, Vec::new())
+        }
+        Message::Terminal(event) => reduce_terminal(event, model),
     }
-
-    (model, Vec::new())
 }
 
 fn reduce_server(message: ServerMessage, model: &mut Model) {
@@ -73,6 +89,7 @@ fn reduce_server(message: ServerMessage, model: &mut Model) {
             tree,
         } => {
             model.local = local_state_for_tree(tree.as_ref(), &model.local);
+            model.focus = focus_for_tree(tree.as_ref(), &model.focus);
             model.session = Some(Session {
                 id: session_id,
                 revision,
@@ -87,6 +104,7 @@ fn reduce_server(message: ServerMessage, model: &mut Model) {
             tree,
         } => {
             let current_local = model.local.clone();
+            let current_focus = model.focus.clone();
             if let Some(session) = &mut model.session
                 && session.id == session_id
                 && revision >= session.revision
@@ -94,7 +112,9 @@ fn reduce_server(message: ServerMessage, model: &mut Model) {
                 session.revision = revision;
                 session.tree = Some(tree);
                 let next_local = local_state_for_tree(session.tree.as_ref(), &current_local);
+                let next_focus = focus_for_tree(session.tree.as_ref(), &current_focus);
                 model.local = next_local;
+                model.focus = next_focus;
             }
         }
         ServerMessage::GenerationStarted {
@@ -129,6 +149,100 @@ fn reduce_server(message: ServerMessage, model: &mut Model) {
         } => {
             if session_matches(model, &session_id) {
                 model.rejection = Some(EventRejection { event_id, reason });
+            }
+        }
+    }
+}
+
+fn reduce_terminal(event: TerminalEvent, mut model: Model) -> (Model, Vec<Effect>) {
+    let focus_order = model
+        .session
+        .as_ref()
+        .and_then(|session| session.tree.as_ref())
+        .map(focus_order)
+        .unwrap_or_default();
+
+    match event {
+        TerminalEvent::FocusNext => {
+            model.focus = advance_focus(&focus_order, &model.focus, true);
+            (model, Vec::new())
+        }
+        TerminalEvent::FocusPrevious => {
+            model.focus = advance_focus(&focus_order, &model.focus, false);
+            (model, Vec::new())
+        }
+        TerminalEvent::Activate => {
+            let effect = match &model.focus {
+                FocusState::Focused(id) => Some(Effect::Activate { id: id.clone() }),
+                FocusState::None => None,
+            };
+            match effect {
+                Some(effect) => (model, vec![effect]),
+                None => (model, Vec::new()),
+            }
+        }
+    }
+}
+
+fn focus_for_tree(tree: Option<&Template>, current: &FocusState) -> FocusState {
+    match tree {
+        Some(tree) => {
+            let order = focus_order(tree);
+            match current {
+                FocusState::Focused(id) if order.contains(id) => FocusState::Focused(id.clone()),
+                FocusState::None | FocusState::Focused(_) => match order.first() {
+                    Some(id) => FocusState::Focused(id.clone()),
+                    None => FocusState::None,
+                },
+            }
+        }
+        None => FocusState::None,
+    }
+}
+
+fn advance_focus(order: &[String], current: &FocusState, forward: bool) -> FocusState {
+    if order.is_empty() {
+        return FocusState::None;
+    }
+
+    let index = match current {
+        FocusState::Focused(id) => order.iter().position(|candidate| candidate == id),
+        FocusState::None => None,
+    };
+    let next_index = match (index, forward) {
+        (Some(index), true) => (index + 1) % order.len(),
+        (Some(0), false) => order.len() - 1,
+        (Some(index), false) => index - 1,
+        (None, true) => 0,
+        (None, false) => order.len() - 1,
+    };
+
+    FocusState::Focused(order[next_index].clone())
+}
+
+fn focus_order(template: &Template) -> Vec<String> {
+    let mut order = Vec::new();
+    collect_focusable_ids(template, &mut order);
+    order
+}
+
+fn collect_focusable_ids(template: &Template, order: &mut Vec<String>) {
+    match template {
+        Template::Text { .. } => {}
+        Template::Container { children, .. } => {
+            for child in children {
+                collect_focusable_ids(child, order);
+            }
+        }
+        Template::Submittable { fields, button, .. } => {
+            for field in fields {
+                match field {
+                    FormField::Input(input) => order.push(input.id.clone()),
+                    FormField::Select(select) => order.push(select.id.clone()),
+                }
+            }
+            if let Some(button) = button {
+                order.push(button.id.clone());
             }
         }
     }
@@ -211,11 +325,14 @@ fn input_value(value: Option<&InputValue>) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{
-        Direction, FormField, Input, Select, Template,
+        Button, Direction, FormField, Input, Select, Template,
         protocol::{ProtocolVersion, ServerEnvelope, ServerMessage},
     };
 
-    use super::{GenerationState, Message, Model, Session, WidgetState, update};
+    use super::{
+        Effect, FocusState, GenerationState, Message, Model, Session, TerminalEvent, WidgetState,
+        update,
+    };
 
     fn server(message: ServerMessage) -> Message {
         Message::Server(ServerEnvelope {
@@ -378,6 +495,50 @@ mod tests {
                 value: String::new(),
                 cursor: 0,
             })
+        );
+    }
+
+    #[test]
+    fn terminal_navigation_cycles_focus_and_activates_the_focused_component() {
+        let tree = Template::Submittable {
+            id: String::from("form"),
+            fields: vec![
+                FormField::Input(Input {
+                    id: String::from("answer"),
+                    value: None,
+                }),
+                FormField::Select(Select {
+                    id: String::from("choice"),
+                    label: String::from("Choice"),
+                    options: Vec::new(),
+                    selected: None,
+                }),
+            ],
+            button: Some(Button {
+                id: String::from("submit"),
+                label: String::from("Submit"),
+                action: String::from("Submit"),
+                disabled: None,
+            }),
+        };
+        let model = update(
+            server(ServerMessage::SessionState {
+                session_id: String::from("session-1"),
+                revision: 1,
+                tree: Some(tree),
+            }),
+            Model::default(),
+        )
+        .0;
+        let focused = update(Message::Terminal(TerminalEvent::FocusNext), model).0;
+        let (activated, effects) = update(Message::Terminal(TerminalEvent::Activate), focused);
+
+        assert_eq!(activated.focus, FocusState::Focused(String::from("choice")));
+        assert_eq!(
+            effects,
+            vec![Effect::Activate {
+                id: String::from("choice"),
+            }]
         );
     }
 }
