@@ -97,7 +97,10 @@ module Port = struct
 
   let send state connection_id message =
     match Stdlib.List.assoc_opt connection_id !(state.sockets) with
-    | Some websocket -> Dream.send websocket (Dream_protocol.ServerMessage.encode_string message)
+    | Some websocket ->
+      let encoded = Dream_protocol.ServerMessage.encode_string message in
+      Codex_client.DebugLog.write "DREAM -> TUI" encoded;
+      Dream.send websocket encoded
     | None -> Lwt.return_unit
 end
 
@@ -257,14 +260,17 @@ let pump_once state =
       state.pump_running <- false;
       Lwt.return_unit
     | Some line ->
-      let event, client = Codex_client.Client.receive ready.client line in
-      state.ready := Some { ready with Bootstrap.client };
-      (match handle_pending_turn state event with
-       | Some handling -> handling
-       | None ->
-         (match handle_pending_interrupt state event with
+      (match !(state.ready) with
+       | None -> Lwt.return_unit
+       | Some current_ready ->
+         let event, client = Codex_client.Client.receive current_ready.client line in
+         state.ready := Some { current_ready with client };
+         (match handle_pending_turn state event with
           | Some handling -> handling
-          | None -> handle_generation_event state event))
+          | None ->
+            (match handle_pending_interrupt state event with
+             | Some handling -> handling
+             | None -> handle_generation_event state event)))
 
 let rec pump state =
   if state.pump_running then
@@ -309,11 +315,14 @@ let enqueue_turn state session_id event =
        | Error _ -> Lwt.return (Error Session_transition_failed)
        | Ok (Codex_client.Turn.Requested command, client, phase) ->
          state.ready := Some { ready with Bootstrap.client };
+         state.pending_turns <- (session_id, phase) :: state.pending_turns;
          Bootstrap.send ready.process command >>= (function
-           | Ok () ->
-             state.pending_turns <- (session_id, phase) :: state.pending_turns;
-             Lwt.return (Ok ())
-           | Error _ -> Lwt.return (Error Session_transition_failed))
+           | Ok () -> Lwt.return (Ok ())
+           | Error _ ->
+             state.pending_turns <- Stdlib.List.filter
+               (fun (id, pending_phase) -> id <> session_id || pending_phase <> phase)
+               state.pending_turns;
+             Lwt.return (Error Session_transition_failed))
        | Ok _ -> Lwt.return (Error Session_transition_failed))
 
 let enqueue_interrupt state session_id turn =
@@ -326,11 +335,14 @@ let enqueue_interrupt state session_id turn =
        | Error _ -> Lwt.return (Error Session_transition_failed)
        | Ok (Codex_client.Interrupt.Requested command, client, phase) ->
          state.ready := Some { ready with Bootstrap.client };
+         state.pending_interrupts <- (session_id, phase) :: state.pending_interrupts;
          Bootstrap.send ready.process command >>= (function
-           | Ok () ->
-             state.pending_interrupts <- (session_id, phase) :: state.pending_interrupts;
-             Lwt.return (Ok ())
-           | Error _ -> Lwt.return (Error Session_transition_failed))
+           | Ok () -> Lwt.return (Ok ())
+           | Error _ ->
+             state.pending_interrupts <- Stdlib.List.filter
+               (fun (id, pending_phase) -> id <> session_id || pending_phase <> phase)
+               state.pending_interrupts;
+             Lwt.return (Error Session_transition_failed))
        | Ok _ -> Lwt.return (Error Session_transition_failed))
   | None, _ | _, None -> Lwt.return (Error Session_transition_failed)
 
@@ -362,6 +374,7 @@ let dispatch state = function
 let rec drain state session_id connection_id websocket =
   Dream.receive websocket >>= function
   | Some line ->
+    Codex_client.DebugLog.write "TUI -> DREAM" line;
     (match Dream_protocol.ClientMessage.decode_string line with
      | Error _ -> Dream.close_websocket ~code:1008 websocket
      | Ok message ->
@@ -393,6 +406,7 @@ let handler state _ =
     Dream.receive websocket >>= function
     | None -> Lwt.return_unit
     | Some line ->
+      Codex_client.DebugLog.write "TUI -> DREAM" line;
       (match Dream_protocol.ClientMessage.decode_string line with
        | Error _ -> Dream.close_websocket ~code:1008 websocket
        | Ok message ->

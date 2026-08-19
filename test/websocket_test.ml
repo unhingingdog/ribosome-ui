@@ -1,3 +1,5 @@
+open Lwt.Infix
+
 let assert_equal label expected actual =
   if expected <> actual then failwith label
 
@@ -150,14 +152,19 @@ let test_pump_starts_follow_up_turns () =
     | Error _ -> failwith "expected session"
   in
   endpoint.registry := registry;
-  match Lwt_main.run (Dream_server.Websocket.enqueue_turn endpoint "session-1"
-    Dream_protocol.ClientMessage.(Click { id = "save" })) with
+  let result = Lwt_main.run (
+    let pumping = Dream_server.Websocket.pump_once endpoint in
+    Lwt.pause () >>= fun () ->
+    Dream_server.Websocket.enqueue_turn endpoint "session-1"
+      Dream_protocol.ClientMessage.(Click { id = "save" }) >>= fun result ->
+    pumping >|= fun () -> result)
+  in
+  match result with
   | Error _ -> failwith "expected queued turn"
   | Ok () ->
-    Lwt_main.run (Dream_server.Websocket.pump_once endpoint);
     match Dream_runtime.Runtime.find_session !(endpoint.registry) "session-1" with
     | Some session ->
-      assert_equal "follow-up click starts another Codex turn" true (Option.is_some session.generation)
+      assert_equal "a running pump sees requests queued while it waits" true (Option.is_some session.generation)
     | None -> failwith "expected session"
 
 let test_generation_loop_preserves_valid_tree_after_invalid_delta () =

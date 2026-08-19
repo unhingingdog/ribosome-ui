@@ -28,6 +28,7 @@ let start ?(stderr_limit = 8192) command =
   let rec capture () =
     Lwt_io.read_line_opt process#stderr >>= function
     | Some line ->
+      DebugLog.write "CODEX stderr" line;
       append_stderr stderr stderr_limit (line ^ "\n");
       capture ()
     | None -> Lwt.return_unit
@@ -38,12 +39,16 @@ let start ?(stderr_limit = 8192) command =
 let send_line t line =
   if t.closed then Lwt.return (Error Closed)
   else
+    let () = DebugLog.write "DREAM -> CODEX" line in
     Lwt_io.write_line t.process#stdin line >>= fun () ->
     Lwt_io.flush t.process#stdin >|= fun () -> Ok ()
 
 let receive_line t =
   if t.closed then Lwt.return_none
-  else Lwt_io.read_line_opt t.process#stdout
+  else
+    Lwt_io.read_line_opt t.process#stdout >|= fun line ->
+    Option.iter (DebugLog.write "CODEX -> DREAM") line;
+    line
 
 let stderr t = Buffer.contents t.stderr
 

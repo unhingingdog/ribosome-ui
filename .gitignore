@@ -2,6 +2,7 @@
 _build/
 _opam/
 /target/
+ribosome-debug.log
 js/output/
 js/dist/
 js/demo/dist/
