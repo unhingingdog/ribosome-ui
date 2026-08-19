@@ -28,6 +28,50 @@ let template =
         label = "Active";
         variant = Templates.Badge.Success;
       };
+      Types.Diagram {
+        Templates.Diagram.kind = "diagram";
+        id = "request-flow";
+        title = "Request flow";
+        size = Templates.Diagram.Regular;
+        primitives = [
+          Templates.Diagram.Rectangle {
+            id = "client";
+            at = { Templates.Diagram.x = 10; y = 30 };
+            width = 20;
+            height = 20;
+            tone = Templates.Diagram.Primary;
+          };
+          Templates.Diagram.Arrow {
+            id = "request";
+            from_ = { Templates.Diagram.x = 30; y = 40 };
+            to_ = { Templates.Diagram.x = 70; y = 40 };
+            tone = Templates.Diagram.Secondary;
+          };
+          Templates.Diagram.Polyline {
+            id = "return";
+            points = (
+              { Templates.Diagram.x = 70; y = 60 },
+              [{ Templates.Diagram.x = 40; y = 70 }; { Templates.Diagram.x = 30; y = 60 }]
+            );
+            tone = Templates.Diagram.Muted;
+          };
+        ];
+      };
+      Types.Code {
+        Templates.Code.kind = "code";
+        id = "request-handler";
+        path = "src/request.ml";
+        language = "ocaml";
+        line_start = 40;
+        source = "let handle request =\n  validate request\n  |> dispatch";
+        highlights = [{
+          Templates.Code.id = "dispatch";
+          start_line = 41;
+          end_line = 42;
+          label = "Validation gates dispatch";
+          tone = Templates.Code.Primary;
+        }];
+      };
       Types.List {
         Templates.List.kind = "list";
         id = "metrics";
@@ -101,7 +145,15 @@ let test_rejects_invalid_templates () =
      | Error _ -> true
      | Ok _ -> false);
   assert_equal "invalid json is rejected" true
-    (match TemplateCodec.decode_string_template "{" with Error _ -> true | Ok _ -> false)
+    (match TemplateCodec.decode_string_template "{" with Error _ -> true | Ok _ -> false);
+  assert_equal "a polyline needs two points" true
+    (match TemplateCodec.decode_string_template
+      "{\"kind\":\"diagram\",\"id\":\"diagram\",\"title\":\"Diagram\",\"size\":\"compact\",\"primitives\":[{\"shape\":\"polyline\",\"id\":\"line\",\"points\":[{\"x\":1,\"y\":2}],\"tone\":\"primary\"}]}"
+     with Error _ -> true | Ok _ -> false);
+  assert_equal "code requires its highlights" true
+    (match TemplateCodec.decode_string_template
+      "{\"kind\":\"code\",\"id\":\"snippet\",\"path\":\"src/a.ml\",\"language\":\"ocaml\",\"line_start\":1,\"source\":\"let x = 1\"}"
+     with Error _ -> true | Ok _ -> false)
 
 let () =
   test_round_trip ();

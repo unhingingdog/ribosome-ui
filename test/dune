@@ -12,6 +12,8 @@
 (copy_files ../engine/templates/list.ml)
 (copy_files ../engine/templates/stat.ml)
 (copy_files ../engine/templates/divider.ml)
+(copy_files ../engine/templates/diagram.ml)
+(copy_files ../engine/templates/code.ml)
 (copy_files ../engine/templates/broken.ml)
 
 (test
@@ -32,7 +34,7 @@
 
 (test
  (name template_models_test)
- (modules TemplateDefinitionTypes Input Text Image Button Select Submittable Badge List Stat Divider Broken template_models_test))
+ (modules TemplateDefinitionTypes Input Text Image Button Select Submittable Badge List Stat Divider Diagram Code Broken template_models_test))
 
 (test
  (name processor_test)
