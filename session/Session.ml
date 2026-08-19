@@ -155,12 +155,16 @@ let rec template_with_id id = function
   | Ribosome_core.Types.Badge badge when badge.id = id -> Some (Ribosome_core.Types.Badge badge)
   | Ribosome_core.Types.Stat stat when stat.id = id -> Some (Ribosome_core.Types.Stat stat)
   | Ribosome_core.Types.Divider divider when divider.id = id -> Some (Ribosome_core.Types.Divider divider)
+  | Ribosome_core.Types.Diagram diagram when diagram.id = id -> Some (Ribosome_core.Types.Diagram diagram)
+  | Ribosome_core.Types.Code code when code.id = id -> Some (Ribosome_core.Types.Code code)
   | Ribosome_core.Types.Broken _
   | Ribosome_core.Types.Image _
   | Ribosome_core.Types.Text _
   | Ribosome_core.Types.Badge _
   | Ribosome_core.Types.Stat _
   | Ribosome_core.Types.Divider _ -> None
+  | Ribosome_core.Types.Diagram _ -> None
+  | Ribosome_core.Types.Code _ -> None
 
 and find_in_children id = function
   | [] -> None
@@ -186,6 +190,8 @@ let rec contains_button id = function
   | Ribosome_core.Types.Badge _
   | Ribosome_core.Types.Stat _
   | Ribosome_core.Types.Divider _ -> false
+  | Ribosome_core.Types.Diagram _ -> false
+  | Ribosome_core.Types.Code _ -> false
 
 let rec contains_field id = function
   | Ribosome_core.Types.Submittable submittable -> Stdlib.List.mem id (submittable_field_ids submittable)
@@ -197,6 +203,8 @@ let rec contains_field id = function
   | Ribosome_core.Types.Badge _
   | Ribosome_core.Types.Stat _
   | Ribosome_core.Types.Divider _ -> false
+  | Ribosome_core.Types.Diagram _ -> false
+  | Ribosome_core.Types.Code _ -> false
 
 let accepts_event tree = function
   | Dream_protocol.ClientMessage.Click { id } ->

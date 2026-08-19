@@ -76,6 +76,22 @@ type divider = {
   label: string option [@json.option] [@json.drop_default];
 } [@@deriving json]
 
+type diagram = {
+  kind: string;
+  id: string;
+  title: string;
+  size: string;
+} [@@deriving json]
+
+type code = {
+  kind: string;
+  id: string;
+  path: string;
+  language: string;
+  line_start: int;
+  source: string;
+} [@@deriving json]
+
 let ( let* ) = Result.bind
 
 let decode_generated decoder value =
@@ -103,6 +119,36 @@ let optional name decoder fields =
   match Stdlib.List.assoc_opt name fields with
   | Some value -> Result.map Option.some (decoder value)
   | None -> Ok None
+
+let decode_point json =
+  let* fields = decode_object json in
+  let* x = required "x" decode_int fields in
+  let* y = required "y" decode_int fields in
+  Ok { Templates.Diagram.x; y }
+
+let decode_diagram_size = function
+  | "compact" -> Ok Templates.Diagram.Compact
+  | "regular" -> Ok Templates.Diagram.Regular
+  | "tall" -> Ok Templates.Diagram.Tall
+  | _ -> Error "expected diagram size"
+
+let decode_diagram_tone = function
+  | "primary" -> Ok Templates.Diagram.Primary
+  | "secondary" -> Ok Templates.Diagram.Secondary
+  | "success" -> Ok Templates.Diagram.Success
+  | "warning" -> Ok Templates.Diagram.Warning
+  | "danger" -> Ok Templates.Diagram.Danger
+  | "muted" -> Ok Templates.Diagram.Muted
+  | _ -> Error "expected diagram tone"
+
+let decode_code_tone = function
+  | "primary" -> Ok Templates.Code.Primary
+  | "secondary" -> Ok Templates.Code.Secondary
+  | "success" -> Ok Templates.Code.Success
+  | "warning" -> Ok Templates.Code.Warning
+  | "danger" -> Ok Templates.Code.Danger
+  | "muted" -> Ok Templates.Code.Muted
+  | _ -> Error "expected code tone"
 
 let decode_list decoder = function
   | `List values ->
@@ -201,6 +247,8 @@ let rec decode_template json =
   | "list" -> decode_list_template json fields
   | "stat" -> decode_stat json
   | "divider" -> decode_divider json
+  | "diagram" -> decode_diagram json fields
+  | "code" -> decode_code json fields
   | "error" -> decode_broken fields
   | _ -> Error "unknown template kind"
 
@@ -292,6 +340,73 @@ and decode_divider json =
     id = value.id;
     label = value.label;
   })
+
+and decode_diagram json fields =
+  let* header = decode_generated diagram_of_json (without_fields ["primitives"] json) in
+  let* size = decode_diagram_size header.size in
+  let* primitives = required "primitives" (decode_list decode_diagram_primitive) fields in
+  Ok (Types.Diagram {
+    Templates.Diagram.kind = header.kind;
+    id = header.id;
+    title = header.title;
+    size;
+    primitives;
+  })
+
+and decode_diagram_primitive json =
+  let* fields = decode_object json in
+  let* shape = required "shape" decode_string fields in
+  let* id = required "id" decode_string fields in
+  let* tone_value = required "tone" decode_string fields in
+  let* tone = decode_diagram_tone tone_value in
+  match shape with
+  | "text" ->
+    let* at = required "at" decode_point fields in
+    let* value = required "value" decode_string fields in
+    Ok (Templates.Diagram.Text { id; at; value; tone })
+  | "line" | "arrow" ->
+    let* from_ = required "from" decode_point fields in
+    let* to_ = required "to" decode_point fields in
+    if shape = "line" then Ok (Templates.Diagram.Line { id; from_; to_; tone })
+    else Ok (Templates.Diagram.Arrow { id; from_; to_; tone })
+  | "rectangle" ->
+    let* at = required "at" decode_point fields in
+    let* width = required "width" decode_int fields in
+    let* height = required "height" decode_int fields in
+    Ok (Templates.Diagram.Rectangle { id; at; width; height; tone })
+  | "circle" ->
+    let* at = required "at" decode_point fields in
+    let* radius = required "radius" decode_int fields in
+    Ok (Templates.Diagram.Circle { id; at; radius; tone })
+  | "polyline" ->
+    let* points = required "points" (decode_list decode_point) fields in
+    (match points with
+     | first :: second :: remaining -> Ok (Templates.Diagram.Polyline { id; points = (first, second :: remaining); tone })
+     | _ -> Error "expected polyline with at least two points")
+  | _ -> Error "expected diagram primitive"
+
+and decode_code json fields =
+  let* header = decode_generated code_of_json (without_fields ["highlights"] json) in
+  let* highlights = required "highlights" (decode_list decode_code_highlight) fields in
+  Ok (Types.Code {
+    Templates.Code.kind = header.kind;
+    id = header.id;
+    path = header.path;
+    language = header.language;
+    line_start = header.line_start;
+    source = header.source;
+    highlights;
+  })
+
+and decode_code_highlight json =
+  let* fields = decode_object json in
+  let* id = required "id" decode_string fields in
+  let* start_line = required "start_line" decode_int fields in
+  let* end_line = required "end_line" decode_int fields in
+  let* label = required "label" decode_string fields in
+  let* tone_value = required "tone" decode_string fields in
+  let* tone = decode_code_tone tone_value in
+  Ok { Templates.Code.id; start_line; end_line; label; tone }
 
 and decode_broken fields =
   let* details = required "details" decode_string fields in
@@ -407,3 +522,83 @@ let rec encode_template = function
       id = value.id;
       label = value.label;
     }
+  | Types.Diagram value -> encode_diagram value
+  | Types.Code value -> encode_code value
+
+and encode_diagram value =
+  let header = diagram_to_json {
+    kind = value.Templates.Diagram.kind;
+    id = value.id;
+    title = value.title;
+    size = encode_diagram_size value.size;
+  } in
+  match header with
+  | `Assoc fields -> `Assoc (fields @ [("primitives", `List (Stdlib.List.map encode_diagram_primitive value.primitives))])
+  | _ -> assert false
+
+and encode_diagram_size = function
+  | Templates.Diagram.Compact -> "compact"
+  | Templates.Diagram.Regular -> "regular"
+  | Templates.Diagram.Tall -> "tall"
+
+and encode_diagram_tone = function
+  | Templates.Diagram.Primary -> "primary"
+  | Templates.Diagram.Secondary -> "secondary"
+  | Templates.Diagram.Success -> "success"
+  | Templates.Diagram.Warning -> "warning"
+  | Templates.Diagram.Danger -> "danger"
+  | Templates.Diagram.Muted -> "muted"
+
+and encode_point point = `Assoc [("x", `Int point.Templates.Diagram.x); ("y", `Int point.y)]
+
+and encode_diagram_primitive = function
+  | Templates.Diagram.Text { id; at; value; tone } -> `Assoc [
+      ("shape", `String "text"); ("id", `String id); ("at", encode_point at);
+      ("value", `String value); ("tone", `String (encode_diagram_tone tone));
+    ]
+  | Templates.Diagram.Line { id; from_; to_; tone }
+  | Templates.Diagram.Arrow { id; from_; to_; tone } as primitive ->
+    let shape = match primitive with Templates.Diagram.Line _ -> "line" | Templates.Diagram.Arrow _ -> "arrow" | _ -> assert false in
+    `Assoc [("shape", `String shape); ("id", `String id); ("from", encode_point from_); ("to", encode_point to_); ("tone", `String (encode_diagram_tone tone))]
+  | Templates.Diagram.Rectangle { id; at; width; height; tone } -> `Assoc [
+      ("shape", `String "rectangle"); ("id", `String id); ("at", encode_point at);
+      ("width", `Int width); ("height", `Int height); ("tone", `String (encode_diagram_tone tone));
+    ]
+  | Templates.Diagram.Circle { id; at; radius; tone } -> `Assoc [
+      ("shape", `String "circle"); ("id", `String id); ("at", encode_point at);
+      ("radius", `Int radius); ("tone", `String (encode_diagram_tone tone));
+    ]
+  | Templates.Diagram.Polyline { id; points = (first, remaining); tone } -> `Assoc [
+      ("shape", `String "polyline"); ("id", `String id);
+      ("points", `List (Stdlib.List.map encode_point (first :: remaining)));
+      ("tone", `String (encode_diagram_tone tone));
+    ]
+
+and encode_code value =
+  let header = code_to_json {
+    kind = value.Templates.Code.kind;
+    id = value.id;
+    path = value.path;
+    language = value.language;
+    line_start = value.line_start;
+    source = value.source;
+  } in
+  match header with
+  | `Assoc fields -> `Assoc (fields @ [("highlights", `List (Stdlib.List.map encode_code_highlight value.highlights))])
+  | _ -> assert false
+
+and encode_code_tone = function
+  | Templates.Code.Primary -> "primary"
+  | Templates.Code.Secondary -> "secondary"
+  | Templates.Code.Success -> "success"
+  | Templates.Code.Warning -> "warning"
+  | Templates.Code.Danger -> "danger"
+  | Templates.Code.Muted -> "muted"
+
+and encode_code_highlight highlight = `Assoc [
+    ("id", `String highlight.Templates.Code.id);
+    ("start_line", `Int highlight.start_line);
+    ("end_line", `Int highlight.end_line);
+    ("label", `String highlight.label);
+    ("tone", `String (encode_code_tone highlight.tone));
+  ]

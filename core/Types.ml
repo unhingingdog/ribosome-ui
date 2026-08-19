@@ -94,6 +94,48 @@ and divider = Templates.Divider.t = {
   label: string option;
 }
 
+and diagram_size = Templates.Diagram.size = Compact | Regular | Tall
+
+and diagram_tone = Templates.Diagram.tone = Primary | Secondary | Success | Warning | Danger | Muted
+
+and diagram_point = Templates.Diagram.point = { x: int; y: int }
+
+and diagram_primitive = Templates.Diagram.primitive =
+  | Text of { id: string; at: diagram_point; value: string; tone: diagram_tone }
+  | Line of { id: string; from_: diagram_point; to_: diagram_point; tone: diagram_tone }
+  | Arrow of { id: string; from_: diagram_point; to_: diagram_point; tone: diagram_tone }
+  | Rectangle of { id: string; at: diagram_point; width: int; height: int; tone: diagram_tone }
+  | Circle of { id: string; at: diagram_point; radius: int; tone: diagram_tone }
+  | Polyline of { id: string; points: diagram_point * diagram_point list; tone: diagram_tone }
+
+and diagram = Templates.Diagram.t = {
+  kind: string;
+  id: string;
+  title: string;
+  size: diagram_size;
+  primitives: diagram_primitive list;
+}
+
+and code_tone = Templates.Code.tone = Primary | Secondary | Success | Warning | Danger | Muted
+
+and code_highlight = Templates.Code.highlight = {
+  id: string;
+  start_line: int;
+  end_line: int;
+  label: string;
+  tone: code_tone;
+}
+
+and code = Templates.Code.t = {
+  kind: string;
+  id: string;
+  path: string;
+  language: string;
+  line_start: int;
+  source: string;
+  highlights: code_highlight list;
+}
+
 and container = template Templates.Container.t and template_list = template Templates.List.t and template =
   | Submittable of submittable
   | Image of image
@@ -104,6 +146,8 @@ and container = template Templates.Container.t and template_list = template Temp
   | List of template_list
   | Stat of stat
   | Divider of divider
+  | Diagram of diagram
+  | Code of code
 
 and submittable_field = Templates.Submittable.field =
   | FieldInput of input
@@ -128,3 +172,5 @@ let id_of_template = function
   | List l -> l.id
   | Stat s -> s.id
   | Divider d -> d.id
+  | Diagram d -> d.id
+  | Code c -> c.id

@@ -10,6 +10,8 @@ let all_definitions : TemplateDefinitionTypes.template_definition list = [
   Templates.List.definition;
   Templates.Stat.definition;
   Templates.Divider.definition;
+  Templates.Diagram.definition;
+  Templates.Code.definition;
 ]
 
 let definition_for_kind kind =

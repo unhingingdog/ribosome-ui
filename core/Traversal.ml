@@ -3,7 +3,7 @@ open Types
 let template_children = function
   | Container container -> container.children
   | List list -> list.children
-  | Submittable _ | Image _ | Text _ | Broken _ | Badge _ | Stat _ | Divider _ -> []
+  | Submittable _ | Image _ | Text _ | Broken _ | Badge _ | Stat _ | Divider _ | Diagram _ | Code _ -> []
 
 let rec fold_templates f initial template =
   let next = f initial template in

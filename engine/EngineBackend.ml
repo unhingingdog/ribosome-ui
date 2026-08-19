@@ -28,7 +28,7 @@ and template_health = function
       children_health Healthy container.children
   | List list ->
       children_health Healthy list.children
-  | Submittable _ | Image _ | Text _ | Badge _ | Stat _ | Divider _ -> Healthy
+  | Submittable _ | Image _ | Text _ | Badge _ | Stat _ | Divider _ | Diagram _ | Code _ -> Healthy
 
 module Telomere_result = struct
   type t =
