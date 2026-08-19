@@ -13,6 +13,14 @@ pub struct Model {
     pub rejection: Option<EventRejection>,
     pub local: BTreeMap<String, WidgetState>,
     pub focus: FocusState,
+    pub viewport: Viewport,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Viewport {
+    pub width: u16,
+    pub height: u16,
+    pub scroll_y: u16,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -50,14 +58,25 @@ pub enum FocusState {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WidgetState {
-    Input { value: String, cursor: usize },
-    Select { selected: Option<String> },
+    Input {
+        value: String,
+        cursor: usize,
+    },
+    Select {
+        selected: Option<String>,
+    },
+    Diagram {
+        center_x: i16,
+        center_y: i16,
+        zoom_percent: u16,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Message {
     Server(ServerEnvelope),
     Terminal(TerminalEvent),
+    Viewport { width: u16, height: u16 },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -70,6 +89,14 @@ pub enum TerminalEvent {
     SelectNext,
     SelectPrevious,
     Cancel,
+    ScrollUp,
+    ScrollDown,
+    PageUp,
+    PageDown,
+    DiagramPan { x: i16, y: i16 },
+    DiagramZoomIn,
+    DiagramZoomOut,
+    DiagramReset,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -91,9 +118,16 @@ pub fn update(message: Message, mut model: Model) -> (Model, Vec<Effect>) {
     match message {
         Message::Server(envelope) => {
             reduce_server(envelope.message, &mut model);
+            clamp_scroll(&mut model);
             (model, Vec::new())
         }
         Message::Terminal(event) => reduce_terminal(event, model),
+        Message::Viewport { width, height } => {
+            model.viewport.width = width;
+            model.viewport.height = height;
+            clamp_scroll(&mut model);
+            (model, Vec::new())
+        }
     }
 }
 
@@ -216,7 +250,60 @@ fn reduce_terminal(event: TerminalEvent, mut model: Model) -> (Model, Vec<Effect
             (model, Vec::new())
         }
         TerminalEvent::Cancel => (model, vec![Effect::CancelGeneration]),
+        TerminalEvent::ScrollUp => {
+            model.viewport.scroll_y = model.viewport.scroll_y.saturating_sub(3);
+            (model, Vec::new())
+        }
+        TerminalEvent::ScrollDown => {
+            model.viewport.scroll_y = model.viewport.scroll_y.saturating_add(3);
+            clamp_scroll(&mut model);
+            (model, Vec::new())
+        }
+        TerminalEvent::PageUp => {
+            model.viewport.scroll_y = model
+                .viewport
+                .scroll_y
+                .saturating_sub(model.viewport.height.max(1));
+            (model, Vec::new())
+        }
+        TerminalEvent::PageDown => {
+            model.viewport.scroll_y = model
+                .viewport
+                .scroll_y
+                .saturating_add(model.viewport.height.max(1));
+            clamp_scroll(&mut model);
+            (model, Vec::new())
+        }
+        TerminalEvent::DiagramPan { x, y } => {
+            pan_focused_diagram(&mut model, x, y);
+            (model, Vec::new())
+        }
+        TerminalEvent::DiagramZoomIn => {
+            zoom_focused_diagram(&mut model, true);
+            (model, Vec::new())
+        }
+        TerminalEvent::DiagramZoomOut => {
+            zoom_focused_diagram(&mut model, false);
+            (model, Vec::new())
+        }
+        TerminalEvent::DiagramReset => {
+            reset_focused_diagram(&mut model);
+            (model, Vec::new())
+        }
     }
+}
+
+fn clamp_scroll(model: &mut Model) {
+    let document_height = model
+        .session
+        .as_ref()
+        .and_then(|session| session.tree.as_ref())
+        .map(|tree| crate::component_registry::content_height(tree, model.viewport.width.max(1)))
+        .unwrap_or(0);
+    model.viewport.scroll_y = model
+        .viewport
+        .scroll_y
+        .min(document_height.saturating_sub(model.viewport.height));
 }
 
 fn focus_for_tree(tree: Option<&Template>, current: &FocusState) -> FocusState {
@@ -263,8 +350,14 @@ fn focus_order(template: &Template) -> Vec<String> {
 
 fn collect_focusable_ids(template: &Template, order: &mut Vec<String>) {
     match template {
-        Template::Text { .. } => {}
-        Template::Container { children, .. } => {
+        Template::Text { .. }
+        | Template::Image { .. }
+        | Template::Badge { .. }
+        | Template::Stat { .. }
+        | Template::Divider { .. }
+        | Template::Code { .. } => {}
+        Template::Diagram { id, .. } => order.push(id.clone()),
+        Template::Container { children, .. } | Template::List { children, .. } => {
             for child in children {
                 collect_focusable_ids(child, order);
             }
@@ -371,8 +464,14 @@ fn select_option_values(model: &Model, id: &str) -> Vec<String> {
 
 fn find_select<'a>(template: &'a Template, id: &str) -> Option<&'a crate::Select> {
     match template {
-        Template::Text { .. } => None,
-        Template::Container { children, .. } => {
+        Template::Text { .. }
+        | Template::Image { .. }
+        | Template::Badge { .. }
+        | Template::Stat { .. }
+        | Template::Divider { .. }
+        | Template::Code { .. }
+        | Template::Diagram { .. } => None,
+        Template::Container { children, .. } | Template::List { children, .. } => {
             children.iter().find_map(|child| find_select(child, id))
         }
         Template::Submittable { fields, .. } => fields.iter().find_map(|field| match field {
@@ -398,8 +497,14 @@ fn find_submit_event(
     local: &BTreeMap<String, WidgetState>,
 ) -> Option<ComponentEvent> {
     match template {
-        Template::Text { .. } => None,
-        Template::Container { children, .. } => children
+        Template::Text { .. }
+        | Template::Image { .. }
+        | Template::Badge { .. }
+        | Template::Stat { .. }
+        | Template::Divider { .. }
+        | Template::Code { .. }
+        | Template::Diagram { .. } => None,
+        Template::Container { children, .. } | Template::List { children, .. } => children
             .iter()
             .find_map(|child| find_submit_event(child, focused_id, local)),
         Template::Submittable { id, fields, button } => {
@@ -438,7 +543,7 @@ fn submitted_value(
                 id: input.id.clone(),
                 value: InputValue::String(value.clone()),
             }),
-            Some(WidgetState::Select { .. }) | None => None,
+            Some(WidgetState::Select { .. }) | Some(WidgetState::Diagram { .. }) | None => None,
         },
         FormField::Select(select) => match local.get(&select.id) {
             Some(WidgetState::Select {
@@ -449,6 +554,7 @@ fn submitted_value(
             }),
             Some(WidgetState::Select { selected: None })
             | Some(WidgetState::Input { .. })
+            | Some(WidgetState::Diagram { .. })
             | None => None,
         },
     }
@@ -481,8 +587,34 @@ fn collect_local_state(
     next: &mut BTreeMap<String, WidgetState>,
 ) {
     match template {
-        Template::Text { .. } => {}
-        Template::Container { children, .. } => {
+        Template::Text { .. }
+        | Template::Image { .. }
+        | Template::Badge { .. }
+        | Template::Stat { .. }
+        | Template::Divider { .. }
+        | Template::Code { .. } => {}
+        Template::Diagram { id, .. } => {
+            let state = match current.get(id) {
+                Some(WidgetState::Diagram {
+                    center_x,
+                    center_y,
+                    zoom_percent,
+                }) => WidgetState::Diagram {
+                    center_x: *center_x,
+                    center_y: *center_y,
+                    zoom_percent: *zoom_percent,
+                },
+                Some(WidgetState::Input { .. }) | Some(WidgetState::Select { .. }) | None => {
+                    WidgetState::Diagram {
+                        center_x: 50,
+                        center_y: 50,
+                        zoom_percent: 100,
+                    }
+                }
+            };
+            next.insert(id.clone(), state);
+        }
+        Template::Container { children, .. } | Template::List { children, .. } => {
             for child in children {
                 collect_local_state(child, current, next);
             }
@@ -496,7 +628,9 @@ fn collect_local_state(
                                 value: value.clone(),
                                 cursor: *cursor,
                             },
-                            Some(WidgetState::Select { .. }) | None => WidgetState::Input {
+                            Some(WidgetState::Select { .. })
+                            | Some(WidgetState::Diagram { .. })
+                            | None => WidgetState::Input {
                                 value: input_value(input.value.as_ref()),
                                 cursor: 0,
                             },
@@ -508,7 +642,9 @@ fn collect_local_state(
                             Some(WidgetState::Select { selected }) => WidgetState::Select {
                                 selected: selected.clone(),
                             },
-                            Some(WidgetState::Input { .. }) | None => WidgetState::Select {
+                            Some(WidgetState::Input { .. })
+                            | Some(WidgetState::Diagram { .. })
+                            | None => WidgetState::Select {
                                 selected: select.selected.clone(),
                             },
                         };
@@ -518,6 +654,49 @@ fn collect_local_state(
             }
         }
     }
+}
+
+fn focused_diagram_state_mut(model: &mut Model) -> Option<&mut WidgetState> {
+    let FocusState::Focused(id) = &model.focus else {
+        return None;
+    };
+    model.local.get_mut(id)
+}
+
+fn pan_focused_diagram(model: &mut Model, x: i16, y: i16) {
+    let Some(WidgetState::Diagram {
+        center_x, center_y, ..
+    }) = focused_diagram_state_mut(model)
+    else {
+        return;
+    };
+    *center_x = (*center_x + x).clamp(0, 100);
+    *center_y = (*center_y + y).clamp(0, 100);
+}
+
+fn zoom_focused_diagram(model: &mut Model, increase: bool) {
+    let Some(WidgetState::Diagram { zoom_percent, .. }) = focused_diagram_state_mut(model) else {
+        return;
+    };
+    *zoom_percent = if increase {
+        zoom_percent.saturating_add(25).min(400)
+    } else {
+        zoom_percent.saturating_sub(25).max(25)
+    };
+}
+
+fn reset_focused_diagram(model: &mut Model) {
+    let Some(WidgetState::Diagram {
+        center_x,
+        center_y,
+        zoom_percent,
+    }) = focused_diagram_state_mut(model)
+    else {
+        return;
+    };
+    *center_x = 50;
+    *center_y = 50;
+    *zoom_percent = 100;
 }
 
 fn input_value(value: Option<&InputValue>) -> String {
@@ -880,6 +1059,83 @@ mod tests {
             selected.local.get("choice"),
             Some(&WidgetState::Select {
                 selected: Some(String::from("one")),
+            })
+        );
+    }
+
+    #[test]
+    fn workspace_scroll_is_clamped_to_the_generated_document() {
+        let tree = Template::Text {
+            id: String::from("response"),
+            text_type: crate::TextType::Paragraph,
+            content: "line\n".repeat(20),
+        };
+        let model = update(
+            Message::Server(ServerEnvelope {
+                protocol_version: crate::protocol::ProtocolVersion::V1,
+                message: ServerMessage::SessionState {
+                    session_id: String::from("session-1"),
+                    revision: 1,
+                    tree: Some(tree),
+                },
+            }),
+            Model::default(),
+        )
+        .0;
+        let model = update(
+            Message::Viewport {
+                width: 20,
+                height: 4,
+            },
+            model,
+        )
+        .0;
+        let scrolled = update(Message::Terminal(TerminalEvent::PageDown), model).0;
+        let restored = update(Message::Terminal(TerminalEvent::PageUp), scrolled.clone()).0;
+
+        assert_eq!(scrolled.viewport.scroll_y, 4);
+        assert_eq!(restored.viewport.scroll_y, 0);
+    }
+
+    #[test]
+    fn diagram_viewport_is_local_and_preserved_by_its_stable_id() {
+        let diagram = Template::Diagram {
+            id: String::from("flow"),
+            title: String::from("Flow"),
+            size: crate::DiagramSize::Regular,
+            primitives: Vec::new(),
+        };
+        let model = update(
+            server(ServerMessage::SessionState {
+                session_id: String::from("session-1"),
+                revision: 1,
+                tree: Some(diagram.clone()),
+            }),
+            Model::default(),
+        )
+        .0;
+        let panned = update(
+            Message::Terminal(TerminalEvent::DiagramPan { x: 10, y: -10 }),
+            model,
+        )
+        .0;
+        let zoomed = update(Message::Terminal(TerminalEvent::DiagramZoomIn), panned).0;
+        let reconciled = update(
+            server(ServerMessage::TemplateUpdate {
+                session_id: String::from("session-1"),
+                revision: 2,
+                tree: diagram,
+            }),
+            zoomed,
+        )
+        .0;
+
+        assert_eq!(
+            reconciled.local.get("flow"),
+            Some(&WidgetState::Diagram {
+                center_x: 60,
+                center_y: 40,
+                zoom_percent: 125,
             })
         );
     }

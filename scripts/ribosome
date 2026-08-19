@@ -96,4 +96,4 @@ until curl --noproxy '*' --fail --silent "http://127.0.0.1:$port/health" >/dev/n
   sleep 0.1
 done
 
-"$tui_binary" "ws://127.0.0.1:$port/v1/tui" "$initial_prompt"
+"$tui_binary" "ws://127.0.0.1:$port/v1/tui" "$initial_prompt" "$profile"
