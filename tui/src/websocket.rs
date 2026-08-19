@@ -4,6 +4,7 @@ use tungstenite::{Message, WebSocket, stream::MaybeTlsStream};
 
 use crate::{
     application::{Effect, Model},
+    debug_log,
     protocol::{ClientEnvelope, ClientMessage, ProtocolVersion, ServerEnvelope},
 };
 
@@ -44,6 +45,7 @@ impl DreamConnection {
 
     pub fn send(&mut self, message: ClientEnvelope) -> Result<(), TransportError> {
         let encoded = serde_json::to_string(&message).map_err(TransportError::Json)?;
+        debug_log::write("TUI -> DREAM", &encoded);
 
         self.socket
             .send(Message::Text(encoded))
@@ -65,9 +67,12 @@ impl DreamConnection {
             .read()
             .map_err(|error| TransportError::Websocket(Box::new(error)))?
         {
-            Message::Text(message) => serde_json::from_str(message.as_str())
-                .map(ReceiveResult::ServerMessage)
-                .map_err(TransportError::Json),
+            Message::Text(message) => {
+                debug_log::write("DREAM -> TUI", message.as_str());
+                serde_json::from_str(message.as_str())
+                    .map(ReceiveResult::ServerMessage)
+                    .map_err(TransportError::Json)
+            }
             Message::Close(_) => Ok(ReceiveResult::Disconnected),
             Message::Binary(_) | Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {
                 Ok(ReceiveResult::Ignored)

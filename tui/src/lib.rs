@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod application;
 pub mod component_registry;
+pub mod debug_log;
 pub mod protocol;
 pub mod runtime;
 pub mod websocket;
@@ -90,11 +91,18 @@ pub struct SelectOption {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Button {
+    pub kind: ButtonKind,
     pub id: String,
     pub label: String,
     pub action: String,
     #[serde(default)]
     pub disabled: Option<bool>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ButtonKind {
+    Button,
 }
 
 #[cfg(test)]
@@ -104,7 +112,7 @@ mod tests {
     #[test]
     fn parses_a_nested_form_tree() {
         let tree: Template = serde_json::from_str(
-            r#"{"kind":"container","id":"root","direction":"vertical","children":[{"kind":"text","id":"title","text_type":"H1","value":"Review"},{"kind":"submittable","id":"quiz","value":[{"kind":"input","id":"answer","value":""}],"button":{"id":"submit","label":"Submit","action":"Submit"}}]}"#,
+            r#"{"kind":"container","id":"root","direction":"vertical","children":[{"kind":"text","id":"title","text_type":"H1","value":"Review"},{"kind":"submittable","id":"quiz","value":[{"kind":"input","id":"answer","value":""}],"button":{"kind":"button","id":"submit","label":"Submit","action":"Submit"}}]}"#,
         )
         .expect("valid template");
 

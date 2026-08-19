@@ -1,15 +1,19 @@
 use std::{io, thread, time::Duration};
 
 use crossterm::{
-    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    event::{
+        self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
+        KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+    },
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{Terminal, backend::CrosstermBackend};
+use ratatui::{Terminal, backend::CrosstermBackend, layout::Rect, widgets::Paragraph};
 
 use crate::{
-    application::{InputEvent, Message, Model, TerminalEvent, update},
-    component_registry::{ComponentRegistry, Registry, RenderContext},
+    application::{GenerationState, InputEvent, Message, Model, TerminalEvent, update},
+    component_registry::{ComponentRegistry, Interaction, Registry, RenderContext, interaction_at},
+    debug_log,
     protocol::{ClientEnvelope, ClientMessage, ProtocolVersion},
     websocket::{DreamConnection, ReceiveResult, TransportError},
 };
@@ -39,16 +43,21 @@ pub fn run(config: RuntimeConfig) -> Result<(), RuntimeError> {
     loop {
         terminal.draw(&model)?;
 
-        if event::poll(Duration::from_millis(16)).map_err(RuntimeError::Io)?
-            && let Event::Key(key) = event::read().map_err(RuntimeError::Io)?
-        {
-            if should_quit(key) {
-                return Ok(());
-            }
-            if let Some(message) = terminal_message(key, &model) {
+        if event::poll(Duration::from_millis(16)).map_err(RuntimeError::Io)? {
+            let messages = match event::read().map_err(RuntimeError::Io)? {
+                Event::Key(key) if should_quit(key) => return Ok(()),
+                Event::Key(key) => terminal_message(key, &model).into_iter().collect(),
+                Event::Mouse(mouse) => mouse_messages(mouse, &model, terminal.area()?),
+                Event::FocusGained | Event::FocusLost | Event::Paste(_) | Event::Resize(_, _) => {
+                    Vec::new()
+                }
+            };
+            for message in messages {
+                debug_log::write("TUI event", &format!("{message:?}"));
                 let (next_model, effects) = update(message, model);
                 model = next_model;
                 for effect in effects {
+                    debug_log::write("TUI effect", &format!("{effect:?}"));
                     event_sequence += 1;
                     connection
                         .execute(effect, &model, format!("event-{event_sequence}"))
@@ -62,11 +71,34 @@ pub fn run(config: RuntimeConfig) -> Result<(), RuntimeError> {
                 model = update(Message::Server(message), model).0;
             }
             Ok(ReceiveResult::Pending | ReceiveResult::Ignored) => {}
-            Ok(ReceiveResult::Disconnected) | Err(_) => {
+            Ok(ReceiveResult::Disconnected) => {
                 thread::sleep(Duration::from_millis(250));
                 connection = connect(&config, &model)?;
             }
+            Err(error) => return Err(RuntimeError::Transport(error)),
         }
+    }
+}
+
+fn mouse_messages(mouse: MouseEvent, model: &Model, area: Rect) -> Vec<Message> {
+    if mouse.kind != MouseEventKind::Down(MouseButton::Left) {
+        return Vec::new();
+    }
+    let Some(tree) = model
+        .session
+        .as_ref()
+        .and_then(|session| session.tree.as_ref())
+    else {
+        return Vec::new();
+    };
+    let (content_area, _) = view_areas(area);
+    match interaction_at(tree, content_area, mouse.column, mouse.row) {
+        Some(Interaction::Focus(id)) => vec![Message::Terminal(TerminalEvent::Focus(id))],
+        Some(Interaction::Activate(id)) => vec![
+            Message::Terminal(TerminalEvent::Focus(id)),
+            Message::Terminal(TerminalEvent::Activate),
+        ],
+        None => Vec::new(),
     }
 }
 
@@ -170,7 +202,7 @@ impl TerminalGuard {
     fn enter() -> Result<Self, RuntimeError> {
         enable_raw_mode().map_err(RuntimeError::Io)?;
         let mut stdout = io::stdout();
-        execute!(stdout, EnterAlternateScreen).map_err(RuntimeError::Io)?;
+        execute!(stdout, EnterAlternateScreen, EnableMouseCapture).map_err(RuntimeError::Io)?;
         Terminal::new(CrosstermBackend::new(stdout))
             .map(|terminal| Self { terminal })
             .map_err(RuntimeError::Io)
@@ -179,6 +211,7 @@ impl TerminalGuard {
     fn draw(&mut self, model: &Model) -> Result<(), RuntimeError> {
         self.terminal
             .draw(|frame| {
+                let (content_area, status_area) = view_areas(frame.area());
                 if let Some(tree) = model
                     .session
                     .as_ref()
@@ -190,20 +223,54 @@ impl TerminalGuard {
                             local: &model.local,
                             focus: &model.focus,
                         },
-                        frame.area(),
+                        content_area,
                         frame.buffer_mut(),
                     );
                 }
+                frame.render_widget(Paragraph::new(status_text(model)), status_area);
             })
             .map(|_| ())
             .map_err(RuntimeError::Io)
+    }
+
+    fn area(&self) -> Result<Rect, RuntimeError> {
+        self.terminal
+            .size()
+            .map(|size| Rect::new(0, 0, size.width, size.height))
+            .map_err(RuntimeError::Io)
+    }
+}
+
+fn view_areas(area: Rect) -> (Rect, Rect) {
+    if area.height == 0 {
+        return (area, area);
+    }
+    (
+        Rect::new(area.x, area.y, area.width, area.height - 1),
+        Rect::new(area.x, area.y + area.height - 1, area.width, 1),
+    )
+}
+
+fn status_text(model: &Model) -> String {
+    match (&model.session, &model.generation) {
+        (None, _) => String::from("Connecting to Dream…"),
+        (Some(_), GenerationState::Active { .. }) => String::from("Generating UI…"),
+        (Some(_), GenerationState::Failed { message, .. }) => {
+            format!("Generation failed: {message}")
+        }
+        (Some(session), GenerationState::Idle) if session.tree.is_some() => String::from("Ready"),
+        (Some(_), GenerationState::Idle) => String::from("Starting generation…"),
     }
 }
 
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
         let _ = disable_raw_mode();
-        let _ = execute!(self.terminal.backend_mut(), LeaveAlternateScreen);
+        let _ = execute!(
+            self.terminal.backend_mut(),
+            DisableMouseCapture,
+            LeaveAlternateScreen
+        );
     }
 }
 
@@ -221,7 +288,25 @@ mod tests {
         },
     };
 
-    use super::terminal_message;
+    use super::{status_text, terminal_message};
+
+    #[test]
+    fn displays_connection_and_generation_status_without_a_tree() {
+        assert_eq!(status_text(&Model::default()), "Connecting to Dream…");
+
+        let model = Model {
+            session: Some(crate::application::Session {
+                id: String::from("session-1"),
+                revision: 0,
+                tree: None,
+            }),
+            generation: crate::application::GenerationState::Active {
+                turn_id: String::from("turn-1"),
+            },
+            ..Model::default()
+        };
+        assert_eq!(status_text(&model), "Generating UI…");
+    }
 
     #[test]
     fn maps_terminal_keys_to_reducer_messages() {
@@ -264,6 +349,7 @@ mod tests {
                 value: None,
             })],
             button: Some(Button {
+                kind: crate::ButtonKind::Button,
                 id: String::from("submit"),
                 label: String::from("Submit"),
                 action: String::from("Submit"),

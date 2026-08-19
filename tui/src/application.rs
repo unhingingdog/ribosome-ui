@@ -62,6 +62,7 @@ pub enum Message {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TerminalEvent {
+    Focus(String),
     FocusNext,
     FocusPrevious,
     Activate,
@@ -178,12 +179,21 @@ fn reduce_terminal(event: TerminalEvent, mut model: Model) -> (Model, Vec<Effect
         .unwrap_or_default();
 
     match event {
+        TerminalEvent::Focus(id) => {
+            if focus_order.contains(&id) {
+                model.focus = FocusState::Focused(id);
+            }
+            (model, Vec::new())
+        }
         TerminalEvent::FocusNext => {
             model.focus = advance_focus(&focus_order, &model.focus, true);
             (model, Vec::new())
         }
         TerminalEvent::FocusPrevious => {
             model.focus = advance_focus(&focus_order, &model.focus, false);
+            (model, Vec::new())
+        }
+        TerminalEvent::Activate if matches!(model.generation, GenerationState::Active { .. }) => {
             (model, Vec::new())
         }
         TerminalEvent::Activate => {
@@ -392,8 +402,18 @@ fn find_submit_event(
         Template::Container { children, .. } => children
             .iter()
             .find_map(|child| find_submit_event(child, focused_id, local)),
-        Template::Submittable { id, fields, button } => match button {
-            Some(button) if button.id == focused_id && !button.disabled.unwrap_or(false) => {
+        Template::Submittable { id, fields, button } => {
+            let field_is_focused = fields.iter().any(|field| match field {
+                FormField::Input(input) => input.id == focused_id,
+                FormField::Select(select) => select.id == focused_id,
+            });
+            let button_is_focused = matches!(button, Some(button) if button.id == focused_id);
+            let submission_is_enabled = match button {
+                Some(button) => !button.disabled.unwrap_or(false),
+                None => true,
+            };
+
+            if submission_is_enabled && (field_is_focused || button_is_focused) {
                 Some(ComponentEvent::Submit {
                     id: id.clone(),
                     values: fields
@@ -401,9 +421,10 @@ fn find_submit_event(
                         .filter_map(|field| submitted_value(field, local))
                         .collect(),
                 })
+            } else {
+                None
             }
-            Some(_) | None => None,
-        },
+        }
     }
 }
 
@@ -702,6 +723,7 @@ mod tests {
                 }),
             ],
             button: Some(Button {
+                kind: crate::ButtonKind::Button,
                 id: String::from("submit"),
                 label: String::from("Submit"),
                 action: String::from("Submit"),
@@ -732,6 +754,72 @@ mod tests {
                 }],
             })]
         );
+    }
+
+    #[test]
+    fn enter_submits_the_form_from_its_input() {
+        let tree = Template::Submittable {
+            id: String::from("form"),
+            fields: vec![FormField::Input(Input {
+                id: String::from("answer"),
+                value: None,
+            })],
+            button: None,
+        };
+        let model = update(
+            server(ServerMessage::SessionState {
+                session_id: String::from("session-1"),
+                revision: 1,
+                tree: Some(tree),
+            }),
+            Model::default(),
+        )
+        .0;
+        let edited = update(
+            Message::Terminal(TerminalEvent::Input(InputEvent::Insert('A'))),
+            model,
+        )
+        .0;
+        let (_, effects) = update(Message::Terminal(TerminalEvent::Activate), edited);
+
+        assert_eq!(
+            effects,
+            vec![Effect::ComponentEvent(ComponentEvent::Submit {
+                id: String::from("form"),
+                values: vec![SubmittedValue {
+                    id: String::from("answer"),
+                    value: InputValue::String(String::from("A")),
+                }],
+            })]
+        );
+    }
+
+    #[test]
+    fn enter_does_not_submit_during_active_generation() {
+        let tree = Template::Submittable {
+            id: String::from("form"),
+            fields: vec![FormField::Input(Input {
+                id: String::from("answer"),
+                value: None,
+            })],
+            button: None,
+        };
+        let model = Model {
+            session: Some(Session {
+                id: String::from("session-1"),
+                revision: 1,
+                tree: Some(tree),
+            }),
+            generation: GenerationState::Active {
+                turn_id: String::from("turn-1"),
+            },
+            focus: FocusState::Focused(String::from("answer")),
+            ..Model::default()
+        };
+
+        let (_, effects) = update(Message::Terminal(TerminalEvent::Activate), model);
+
+        assert!(effects.is_empty());
     }
 
     #[test]
