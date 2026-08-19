@@ -68,6 +68,7 @@ pub enum TerminalEvent {
     Input(InputEvent),
     SelectNext,
     SelectPrevious,
+    Cancel,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -82,6 +83,7 @@ pub enum InputEvent {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Effect {
     ComponentEvent(ComponentEvent),
+    CancelGeneration,
 }
 
 pub fn update(message: Message, mut model: Model) -> (Model, Vec<Effect>) {
@@ -203,6 +205,7 @@ fn reduce_terminal(event: TerminalEvent, mut model: Model) -> (Model, Vec<Effect
             select_focused_option(&mut model, false);
             (model, Vec::new())
         }
+        TerminalEvent::Cancel => (model, vec![Effect::CancelGeneration]),
     }
 }
 
