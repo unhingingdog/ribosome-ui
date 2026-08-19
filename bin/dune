@@ -1,0 +1,3 @@
+(executable
+ (name ribosome_dream)
+ (libraries dream_server lwt.unix))

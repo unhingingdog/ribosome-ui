@@ -1,0 +1,99 @@
+#!/bin/sh
+set -eu
+
+launcher=$0
+while [ -L "$launcher" ]; do
+  launcher_directory=$(CDPATH= cd -P -- "$(dirname -- "$launcher")" && pwd -P)
+  launcher_target=$(readlink "$launcher")
+  case "$launcher_target" in
+    /*) launcher=$launcher_target ;;
+    *) launcher="$launcher_directory/$launcher_target" ;;
+  esac
+done
+archive_root=$(CDPATH= cd -P -- "$(dirname -- "$launcher")/.." && pwd -P)
+port=${RIBOSOME_PORT:-8787}
+dream_binary=${RIBOSOME_DREAM_BIN:-$archive_root/bin/ribosome-dream}
+tui_binary=${RIBOSOME_TUI_BIN:-$archive_root/bin/ribosome-tui}
+skill_root=${RIBOSOME_SKILL_ROOT:-$archive_root/skills}
+
+usage() {
+  printf '%s\n' 'usage: ribosome [pr [--base <git-ref>]]' >&2
+  exit 2
+}
+
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    printf 'ribosome: required command not found: %s\n' "$1" >&2
+    exit 1
+  fi
+}
+
+profile=conversation
+base=main
+case $# in
+  0) ;;
+  1)
+    [ "$1" = pr ] || usage
+    profile=pr
+    ;;
+  3)
+    [ "$1" = pr ] && [ "$2" = --base ] || usage
+    profile=pr
+    base=$3
+    ;;
+  *) usage ;;
+esac
+
+require_command codex
+require_command curl
+
+if [ "$profile" = pr ]; then
+  require_command git
+  if ! git rev-parse --verify "$base^{commit}" >/dev/null 2>&1; then
+    printf 'ribosome: Git base does not resolve to a commit: %s\n' "$base" >&2
+    exit 1
+  fi
+  initial_prompt=$(printf 'Use the packaged pr-quizzer skill. Inspect the read-only Git diff %s...HEAD and generate a Ribosome UI that explains it and asks the first focused comprehension question.' "$base")
+else
+  initial_prompt='Use the packaged ribosome-conversation skill. Generate its required initial UI: a vertical container that says "que pasa?" and contains a submittable input form.'
+fi
+
+runtime_directory=$(mktemp -d "${TMPDIR:-/tmp}/ribosome.XXXXXX")
+dream_log=${RIBOSOME_DEBUG_LOG:-$runtime_directory/dream.log}
+dream_pid=
+
+cleanup() {
+  if [ -n "$dream_pid" ]; then
+    kill "$dream_pid" 2>/dev/null || true
+    wait "$dream_pid" 2>/dev/null || true
+  fi
+  rm -rf "$runtime_directory"
+}
+trap cleanup EXIT HUP INT TERM
+
+"$dream_binary" \
+  --interface 127.0.0.1 \
+  --port "$port" \
+  --cwd "$PWD" \
+  --skill-root "$skill_root" >>"$dream_log" 2>&1 &
+dream_pid=$!
+
+attempt=0
+until curl --noproxy '*' --fail --silent "http://127.0.0.1:$port/health" >/dev/null 2>&1; do
+  if ! kill -0 "$dream_pid" 2>/dev/null; then
+    wait "$dream_pid" 2>/dev/null || true
+    dream_pid=
+    printf '%s\n' 'ribosome: Dream exited during startup' >&2
+    cat "$dream_log" >&2
+    exit 1
+  fi
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 300 ]; then
+    printf '%s\n' 'ribosome: Dream did not become ready' >&2
+    cat "$dream_log" >&2
+    exit 1
+  fi
+  sleep 0.1
+done
+
+"$tui_binary" "ws://127.0.0.1:$port/v1/tui" "$initial_prompt"

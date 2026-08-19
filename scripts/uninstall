@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+release_directory=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
+version=$(cat "$release_directory/VERSION")
+install_directory="$HOME/.local/share/ribosome/$version"
+command_path="$HOME/.local/bin/ribosome"
+expected_target="$install_directory/bin/ribosome"
+
+if [ -L "$command_path" ] && [ "$(readlink "$command_path")" = "$expected_target" ]; then
+  rm "$command_path"
+fi
+
+rm -rf "$install_directory"
+printf '%s\n' 'Ribosome uninstalled.'

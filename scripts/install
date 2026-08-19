@@ -1,0 +1,34 @@
+#!/bin/sh
+set -eu
+
+release_directory=$(CDPATH= cd -P -- "$(dirname -- "$0")" && pwd -P)
+version=$(cat "$release_directory/VERSION")
+install_directory="$HOME/.local/share/ribosome/$version"
+command_directory="$HOME/.local/bin"
+profile="$HOME/.zprofile"
+temporary_directory="$HOME/.local/share/ribosome/.${version}.$$"
+
+mkdir -p "$HOME/.local/share/ribosome" "$command_directory"
+rm -rf "$temporary_directory"
+cp -R "$release_directory" "$temporary_directory"
+rm -rf "$install_directory"
+mv "$temporary_directory" "$install_directory"
+
+temporary_link="$command_directory/.ribosome.$$.tmp"
+ln -s "$install_directory/bin/ribosome" "$temporary_link"
+mv -f "$temporary_link" "$command_directory/ribosome"
+
+touch "$profile"
+if ! grep -Fqx '# ribosome-path' "$profile"; then
+  cat >>"$profile" <<'EOF'
+
+# ribosome-path
+export PATH="$HOME/.local/bin:$PATH"
+EOF
+fi
+
+if ! command -v codex >/dev/null 2>&1; then
+  printf '%s\n' 'ribosome: Codex is not on PATH; install and authenticate Codex before running ribosome.' >&2
+fi
+
+printf '%s\n' 'Ribosome installed. Open a new terminal, or run: source ~/.zprofile && hash -r'

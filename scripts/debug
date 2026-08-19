@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+repository_root=$(CDPATH= cd -P -- "$(dirname -- "$0")/.." && pwd -P)
+log=${RIBOSOME_DEBUG_LOG:-$repository_root/ribosome-debug.log}
+
+: >"$log"
+cd "$repository_root"
+dune build ./bin/ribosome_dream.exe
+cargo build -p ribosome-tui
+
+printf 'Ribosome debug log: %s\n' "$log"
+RIBOSOME_DEBUG_LOG="$log" \
+RIBOSOME_DREAM_BIN="$repository_root/_build/default/bin/ribosome_dream.exe" \
+RIBOSOME_TUI_BIN="$repository_root/target/debug/ribosome-tui" \
+RIBOSOME_SKILL_ROOT="$repository_root/skills" \
+exec "$repository_root/scripts/ribosome" "$@"

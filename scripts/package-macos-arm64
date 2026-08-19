@@ -1,0 +1,113 @@
+#!/bin/sh
+set -eu
+
+usage() {
+  printf '%s\n' 'usage: scripts/package-macos-arm64 <output-directory>' >&2
+  exit 2
+}
+
+[ "$#" -eq 1 ] || usage
+
+if [ "$(uname -s)" != Darwin ] || [ "$(uname -m)" != arm64 ]; then
+  printf '%s\n' 'package-macos-arm64: run this script on an ARM64 macOS host' >&2
+  exit 1
+fi
+
+for command in cargo codesign dune install_name_tool otool shasum tar; do
+  command -v "$command" >/dev/null 2>&1 || {
+    printf 'package-macos-arm64: required command not found: %s\n' "$command" >&2
+    exit 1
+  }
+done
+
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+output_directory=$(mkdir -p "$1" && CDPATH= cd -- "$1" && pwd)
+version=${RIBOSOME_VERSION:-$(git -C "$repository_root" describe --tags --always --dirty)}
+release_base="ribosome-$version-macos-arm64"
+release_name=$release_base
+if [ -e "$output_directory/$release_name" ] || [ -e "$output_directory/$release_name.tar.gz" ]; then
+  release_name="$release_base-$(date +%Y%m%d%H%M%S)"
+fi
+release_directory="$output_directory/$release_name"
+latest_link="$output_directory/ribosome-macos-arm64"
+
+if [ -e "$latest_link" ] && [ ! -L "$latest_link" ]; then
+  printf 'package-macos-arm64: latest-release path is not a symlink: %s\n' "$latest_link" >&2
+  exit 1
+fi
+
+cd "$repository_root"
+dune build --profile release ./bin/ribosome_dream.exe
+cargo build --release --locked -p ribosome-tui
+
+mkdir -p "$release_directory/bin" "$release_directory/lib" "$release_directory/skills"
+cp _build/default/bin/ribosome_dream.exe "$release_directory/bin/ribosome-dream"
+cp target/release/ribosome-tui "$release_directory/bin/ribosome-tui"
+cp scripts/ribosome "$release_directory/bin/ribosome"
+cp scripts/install scripts/uninstall "$release_directory/"
+printf '%s\n' "$version" >"$release_directory/VERSION"
+chmod 755 "$release_directory/install" "$release_directory/uninstall" "$release_directory/bin/ribosome" "$release_directory/bin/ribosome-dream" "$release_directory/bin/ribosome-tui"
+codesign --remove-signature "$release_directory/bin/ribosome-dream"
+codesign --remove-signature "$release_directory/bin/ribosome-tui"
+cp -R skills/ribosome skills/ribosome-conversation skills/pr-quizzer "$release_directory/skills/"
+
+bundle_dependency() {
+  source_path=$1
+  dependency_name=$(basename "$source_path")
+  destination="$release_directory/lib/$dependency_name"
+  if [ ! -e "$destination" ]; then
+    cp "$source_path" "$destination"
+    chmod u+w "$destination"
+    codesign --remove-signature "$destination"
+    install_name_tool -id "@rpath/$dependency_name" "$destination"
+  fi
+}
+
+for binary in "$release_directory/bin/ribosome-dream" "$release_directory/bin/ribosome-tui"; do
+  otool -L "$binary" | tail -n +2 | awk '{print $1}' | while IFS= read -r dependency; do
+    case "$dependency" in
+      /usr/lib/*|/System/Library/*|@*) ;;
+      *) bundle_dependency "$dependency" ;;
+    esac
+  done
+done
+
+for library in "$release_directory/lib"/*.dylib; do
+  [ -e "$library" ] || continue
+  otool -L "$library" | tail -n +2 | awk '{print $1}' | while IFS= read -r dependency; do
+    dependency_name=$(basename "$dependency")
+    if [ -e "$release_directory/lib/$dependency_name" ]; then
+      install_name_tool -change "$dependency" "@loader_path/$dependency_name" "$library"
+    fi
+  done
+done
+
+for binary in "$release_directory/bin/ribosome-dream" "$release_directory/bin/ribosome-tui"; do
+  otool -L "$binary" | tail -n +2 | awk '{print $1}' | while IFS= read -r dependency; do
+    dependency_name=$(basename "$dependency")
+    if [ -e "$release_directory/lib/$dependency_name" ]; then
+      install_name_tool -change "$dependency" "@executable_path/../lib/$dependency_name" "$binary"
+    fi
+  done
+done
+
+for library in "$release_directory/lib"/*.dylib; do
+  [ -e "$library" ] || continue
+  codesign --force --sign - "$library"
+done
+codesign --force --sign - "$release_directory/bin/ribosome-dream"
+codesign --force --sign - "$release_directory/bin/ribosome-tui"
+
+for executable in "$release_directory/bin/ribosome-dream" "$release_directory/bin/ribosome-tui" "$release_directory/lib"/*.dylib; do
+  [ -e "$executable" ] || continue
+  if otool -L "$executable" | tail -n +2 | awk '{print $1}' | grep -E '(^/opt/homebrew/|^/usr/local/|/_opam/|/_build/)' >/dev/null; then
+    printf 'package-macos-arm64: external library path remains in %s\n' "$executable" >&2
+    exit 1
+  fi
+done
+
+tar -C "$output_directory" -czf "$output_directory/$release_name.tar.gz" "$release_name"
+shasum -a 256 "$output_directory/$release_name.tar.gz" >"$output_directory/$release_name.tar.gz.sha256"
+rm -f "$latest_link"
+ln -s "$release_name" "$latest_link"
+printf '%s\n' "$release_directory"
