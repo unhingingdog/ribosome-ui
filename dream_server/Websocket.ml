@@ -5,6 +5,7 @@ type t = {
   sockets: (string * Dream.websocket) list ref;
   ready: Bootstrap.ready option ref;
   mutable pump_running: bool;
+  mutable pending_turns: (string * Codex_client.Turn.phase) list;
   mutable next_session_id: int;
   mutable next_connection_id: int;
 }
@@ -37,6 +38,7 @@ let create ?ready () = {
   sockets = ref [];
   ready = ref ready;
   pump_running = false;
+  pending_turns = [];
   next_session_id = 1;
   next_connection_id = 1;
 }
@@ -192,6 +194,37 @@ let handle_generation_event state event =
   | Codex_client.Client.Unexpected_response _
   | Codex_client.Client.Protocol_error _ -> Lwt.return_unit
 
+let handle_pending_turn state event =
+  match event with
+  | Codex_client.Client.Response { request; _ } ->
+    let matched, retained = Stdlib.List.partition (fun (_, phase) ->
+      match phase with
+      | Codex_client.Turn.Waiting id -> id = request.id
+      | Codex_client.Turn.Idle | Codex_client.Turn.Active _ -> false
+    ) state.pending_turns in
+    state.pending_turns <- retained;
+    (match matched, !(state.ready) with
+     | (session_id, phase) :: _, Some ready ->
+       (match Dream_runtime.Runtime.find_session !(state.registry) session_id with
+        | None -> Some Lwt.return_unit
+        | Some session ->
+          Some (match Codex_client.Turn.receive phase ready.client event with
+            | Ok (Codex_client.Turn.Turn_started turn, _, Codex_client.Turn.Active _) ->
+              (match Ribosome_session.Session.start_generation session turn with
+               | Error _ -> Lwt.return_unit
+               | Ok session ->
+                 (match replace_session state session with
+                  | Error _ -> Lwt.return_unit
+                  | Ok () -> send_to_session state session (Dream_protocol.ServerMessage.Generation_started {
+                      session_id = session.id;
+                      turn_id = turn.id;
+                    })))
+            | Ok _ | Error _ -> Lwt.return_unit))
+     | [], _ | _, None -> None)
+  | Codex_client.Client.Notification _
+  | Codex_client.Client.Unexpected_response _
+  | Codex_client.Client.Protocol_error _ -> None
+
 let pump_once state =
   match !(state.ready) with
   | None -> Lwt.return_unit
@@ -203,7 +236,9 @@ let pump_once state =
     | Some line ->
       let event, client = Codex_client.Client.receive ready.client line in
       state.ready := Some { ready with Bootstrap.client };
-      handle_generation_event state event
+      (match handle_pending_turn state event with
+       | Some handling -> handling
+       | None -> handle_generation_event state event)
 
 let rec pump state =
   if state.pump_running then
@@ -224,6 +259,36 @@ let event_reason = function
   | Ribosome_session.Session.Unknown_component _ -> "unknown component"
   | Ribosome_session.Session.Invalid_component_event -> "invalid component event"
   | Ribosome_session.Session.Duplicate_event_id -> "duplicate event ID"
+
+let starts_turn = function
+  | Dream_protocol.ClientMessage.Click _ | Dream_protocol.ClientMessage.Submit _ -> true
+  | Dream_protocol.ClientMessage.Change _ -> false
+
+let enqueue_turn state session_id event =
+  match !(state.ready), Dream_runtime.Runtime.find_session !(state.registry) session_id with
+  | None, _ | _, None -> Lwt.return (Error Session_transition_failed)
+  | Some _, Some _ when Stdlib.List.exists (fun (id, _) -> id = session_id) state.pending_turns ->
+    Lwt.return (Error Session_transition_failed)
+  | Some ready, Some session ->
+    (match session.thread with
+     | None -> Lwt.return (Error Session_transition_failed)
+     | Some thread ->
+       let request = Codex_client.Turn.{
+         thread;
+         skill = ready.skill;
+         semantic_input = Melange_json.to_string (Dream_protocol.ClientMessage.encode_event event);
+         tree = session.tree;
+       } in
+       match Codex_client.Turn.start Codex_client.Turn.Idle ready.client request with
+       | Error _ -> Lwt.return (Error Session_transition_failed)
+       | Ok (Codex_client.Turn.Requested command, client, phase) ->
+         state.ready := Some { ready with Bootstrap.client };
+         Bootstrap.send ready.process command >>= (function
+           | Ok () ->
+             state.pending_turns <- (session_id, phase) :: state.pending_turns;
+             Lwt.return (Ok ())
+           | Error _ -> Lwt.return (Error Session_transition_failed))
+       | Ok _ -> Lwt.return (Error Session_transition_failed))
 
 let dispatch state = function
   | Dream_protocol.ClientMessage.Component_event ({ session_id; event_id; _ } as message) ->
@@ -257,7 +322,11 @@ let rec drain state session_id connection_id websocket =
      | Error _ -> Dream.close_websocket ~code:1008 websocket
      | Ok message ->
        (match dispatch state message with
-        | Ok (Event_accepted _ | Cancellation_requested _) -> drain state session_id connection_id websocket
+        | Ok (Event_accepted accepted) ->
+          (if starts_turn accepted.event then enqueue_turn state session_id accepted.event else Lwt.return (Ok ())) >>= (function
+            | Ok () -> drain state session_id connection_id websocket
+            | Error _ -> Dream.close_websocket ~code:1011 websocket)
+        | Ok (Cancellation_requested _) -> drain state session_id connection_id websocket
         | Error (Event_rejected rejection) ->
           Dream.send websocket (Dream_protocol.ServerMessage.encode_string
             (Dream_protocol.ServerMessage.Event_rejected {

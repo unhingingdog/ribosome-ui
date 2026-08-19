@@ -120,10 +120,51 @@ let test_pump_commits_streamed_templates () =
     assert_equal "completion clears the active generation" None session.generation
   | None -> failwith "expected session"
 
+let test_pump_starts_follow_up_turns () =
+  let app_server = Codex_client.Stdio.command "/bin/sh" [
+    "-c";
+    "read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"userAgent\":\"codex\",\"codexHome\":\"/tmp/codex\",\"platformFamily\":\"unix\",\"platformOs\":\"macos\"}}'; read line; read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}'; read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"data\":[{\"cwd\":\"/opt/ribosome\",\"skills\":[{\"name\":\"ribosome\",\"description\":\"Generate UI\",\"path\":\"/opt/ribosome/skills/ribosome/SKILL.md\",\"enabled\":true}],\"errors\":[]}]}}'; read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{\"turn\":{\"id\":\"turn-2\"}}}'";
+  ] in
+  let ready = match Lwt_main.run (Dream_server.Bootstrap.start Dream_server.Bootstrap.{
+    interface = "127.0.0.1"; port = 9010; codex_command = app_server;
+    skill_root = "/opt/ribosome/skills"; cwd = "/opt/ribosome";
+  }) with
+    | Ok ready -> ready
+    | Error _ -> failwith "expected bootstrap"
+  in
+  let endpoint = Dream_server.Websocket.create ~ready () in
+  let form = Ribosome_core.Types.Submittable Templates.Submittable.{
+    kind = "submittable";
+    id = "form";
+    value = [];
+    button = Some Templates.Button.{ kind = "button"; id = "save"; label = "Save"; action = Submit; disabled = None };
+  } in
+  let session = match Ribosome_session.Session.attach_thread
+    (Ribosome_session.Session.create ~initial_prompt:"Initial request" "session-1")
+    Codex_client.Thread.{ id = "thread-1" } with
+    | Ok session -> { session with tree = Some form }
+    | Error _ -> failwith "expected thread"
+  in
+  let registry = match Dream_runtime.Runtime.add_session !(endpoint.registry) session with
+    | Ok registry -> registry
+    | Error _ -> failwith "expected session"
+  in
+  endpoint.registry := registry;
+  match Lwt_main.run (Dream_server.Websocket.enqueue_turn endpoint "session-1"
+    Dream_protocol.ClientMessage.(Click { id = "save" })) with
+  | Error _ -> failwith "expected queued turn"
+  | Ok () ->
+    Lwt_main.run (Dream_server.Websocket.pump_once endpoint);
+    match Dream_runtime.Runtime.find_session !(endpoint.registry) "session-1" with
+    | Some session ->
+      assert_equal "follow-up click starts another Codex turn" true (Option.is_some session.generation)
+    | None -> failwith "expected session"
+
 let () =
   test_new_session_negotiation ();
   test_resume_and_disconnect ();
   test_rejects_events_before_negotiation ();
   test_dispatches_semantic_events ();
   test_starts_initial_turn_when_codex_is_available ();
-  test_pump_commits_streamed_templates ()
+  test_pump_commits_streamed_templates ();
+  test_pump_starts_follow_up_turns ()
