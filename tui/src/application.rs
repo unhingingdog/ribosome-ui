@@ -87,33 +87,37 @@ fn reduce_server(message: ServerMessage, model: &mut Model) {
         ServerMessage::GenerationStarted {
             session_id,
             turn_id,
-        } if session_matches(model, &session_id) => {
-            model.generation = GenerationState::Active { turn_id };
+        } => {
+            if session_matches(model, &session_id) {
+                model.generation = GenerationState::Active { turn_id };
+            }
         }
         ServerMessage::GenerationCompleted {
             session_id,
             turn_id,
-        } if session_matches(model, &session_id) && active_turn_matches(model, &turn_id) => {
-            model.generation = GenerationState::Idle;
+        } => {
+            if session_matches(model, &session_id) && active_turn_matches(model, &turn_id) {
+                model.generation = GenerationState::Idle;
+            }
         }
         ServerMessage::GenerationFailed {
             session_id,
             turn_id,
             message,
-        } if session_matches(model, &session_id) && active_turn_matches(model, &turn_id) => {
-            model.generation = GenerationState::Failed { turn_id, message };
+        } => {
+            if session_matches(model, &session_id) && active_turn_matches(model, &turn_id) {
+                model.generation = GenerationState::Failed { turn_id, message };
+            }
         }
         ServerMessage::EventRejected {
             session_id,
             event_id,
             reason,
-        } if session_matches(model, &session_id) => {
-            model.rejection = Some(EventRejection { event_id, reason });
+        } => {
+            if session_matches(model, &session_id) {
+                model.rejection = Some(EventRejection { event_id, reason });
+            }
         }
-        ServerMessage::GenerationStarted { .. }
-        | ServerMessage::GenerationCompleted { .. }
-        | ServerMessage::GenerationFailed { .. }
-        | ServerMessage::EventRejected { .. } => {}
     }
 }
 
