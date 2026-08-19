@@ -87,9 +87,43 @@ let test_starts_initial_turn_when_codex_is_available () =
     ignore (Lwt_main.run (Codex_client.Stdio.shutdown ready.process))
   | Ok _ | Error _ -> failwith "expected initial generation"
 
+let test_pump_commits_streamed_templates () =
+  let app_server = Codex_client.Stdio.command "/bin/sh" [
+    "-c";
+    "read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"userAgent\":\"codex\",\"codexHome\":\"/tmp/codex\",\"platformFamily\":\"unix\",\"platformOs\":\"macos\"}}'; read line; read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}'; read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"data\":[{\"cwd\":\"/opt/ribosome\",\"skills\":[{\"name\":\"ribosome\",\"description\":\"Generate UI\",\"path\":\"/opt/ribosome/skills/ribosome/SKILL.md\",\"enabled\":true}],\"errors\":[]}]}}'; read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'; read line; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":5,\"result\":{\"turn\":{\"id\":\"turn-1\"}}}'; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"item/agentMessage/delta\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"turn-1\",\"itemId\":\"item-1\",\"delta\":\"{\\\"kind\\\":\\\"text\\\",\\\"id\\\":\\\"title\\\",\\\"text_type\\\":\\\"Paragraph\\\",\\\"value\\\":\\\"After\\\"}\"}}'; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{\"threadId\":\"thread-1\",\"turn\":{\"id\":\"turn-1\",\"status\":\"completed\"}}}'";
+  ] in
+  let ready = match Lwt_main.run (Dream_server.Bootstrap.start Dream_server.Bootstrap.{
+    interface = "127.0.0.1";
+    port = 9010;
+    codex_command = app_server;
+    skill_root = "/opt/ribosome/skills";
+    cwd = "/opt/ribosome";
+  }) with
+    | Ok ready -> ready
+    | Error _ -> failwith "expected bootstrap"
+  in
+  let endpoint = Dream_server.Websocket.create ~ready () in
+  let accepted = match Dream_server.Websocket.negotiate endpoint
+    Dream_protocol.ClientMessage.(New_session { initial_prompt = "Explain this change." }) with
+    | Ok accepted -> accepted
+    | Error _ -> failwith "expected new session"
+  in
+  let initial_session = match Lwt_main.run (Dream_server.Websocket.start_initial_turn endpoint accepted.session.id) with
+    | Ok (session, _) -> session
+    | Error _ -> failwith "expected initial generation"
+  in
+  Lwt_main.run (Dream_server.Websocket.pump_once endpoint);
+  Lwt_main.run (Dream_server.Websocket.pump_once endpoint);
+  match Dream_runtime.Runtime.find_session !(endpoint.registry) initial_session.id with
+  | Some session ->
+    assert_equal "Codex deltas update the authoritative tree" true (Option.is_some session.tree);
+    assert_equal "completion clears the active generation" None session.generation
+  | None -> failwith "expected session"
+
 let () =
   test_new_session_negotiation ();
   test_resume_and_disconnect ();
   test_rejects_events_before_negotiation ();
   test_dispatches_semantic_events ();
-  test_starts_initial_turn_when_codex_is_available ()
+  test_starts_initial_turn_when_codex_is_available ();
+  test_pump_commits_streamed_templates ()

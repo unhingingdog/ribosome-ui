@@ -4,6 +4,7 @@ type t = {
   registry: Dream_runtime.Runtime.registry ref;
   sockets: (string * Dream.websocket) list ref;
   ready: Bootstrap.ready option ref;
+  mutable pump_running: bool;
   mutable next_session_id: int;
   mutable next_connection_id: int;
 }
@@ -35,6 +36,7 @@ let create ?ready () = {
   registry = ref Dream_runtime.Runtime.empty_registry;
   sockets = ref [];
   ready = ref ready;
+  pump_running = false;
   next_session_id = 1;
   next_connection_id = 1;
 }
@@ -115,6 +117,105 @@ let start_initial_turn state session_id =
          })
        | Error _, _ | Ok (), None -> Error Session_transition_failed)
 
+let active_generation session =
+  match session.Ribosome_session.Session.thread, session.generation with
+  | Some thread, Some { turn; _ } -> Some (thread, turn)
+  | None, _ | Some _, None -> None
+
+let send_to_session state (session : Ribosome_session.Session.t) message =
+  Lwt_list.iter_s (fun connection_id -> Port.send state connection_id message) session.connections
+
+let finish_generation state session turn_id message =
+  let transition = match message with
+    | Dream_protocol.ServerMessage.Generation_completed _ ->
+      Ribosome_session.Session.complete_generation session turn_id
+    | Dream_protocol.ServerMessage.Generation_failed _ ->
+      Ribosome_session.Session.fail_generation session turn_id
+    | Dream_protocol.ServerMessage.Session_state _
+    | Dream_protocol.ServerMessage.Template_update _
+    | Dream_protocol.ServerMessage.Generation_started _
+    | Dream_protocol.ServerMessage.Event_rejected _ -> Error Ribosome_session.Session.Wrong_turn
+  in
+  match transition with
+  | Error _ -> Lwt.return_unit
+  | Ok session ->
+    (match replace_session state session with
+     | Ok () -> send_to_session state session message
+     | Error _ -> Lwt.return_unit)
+
+let handle_generation_event state event =
+  match event with
+  | Codex_client.Client.Notification _ ->
+    let active_sessions = Stdlib.List.filter_map (fun session ->
+      match active_generation session with
+      | Some generation -> Some (session, generation)
+      | None -> None
+    ) !(state.registry) in
+    let rec route = function
+      | [] -> Lwt.return_unit
+      | (session, (thread, turn)) :: remaining ->
+        match Codex_client.Generation.route thread turn event with
+        | Ok Codex_client.Generation.Ignored -> route remaining
+        | Error _ ->
+          finish_generation state session turn.id
+            (Dream_protocol.ServerMessage.Generation_failed {
+              session_id = session.id;
+              turn_id = turn.id;
+              message = "invalid Codex generation notification";
+            })
+        | Ok (Codex_client.Generation.Routed (Codex_client.Generation.Delta { delta; _ })) ->
+          (match Ribosome_session.Session.feed_delta session delta with
+           | Error _ -> Lwt.return_unit
+           | Ok (session, None) ->
+             (match replace_session state session with Ok () -> Lwt.return_unit | Error _ -> Lwt.return_unit)
+           | Ok (session, Some emission) ->
+             (match replace_session state session with
+              | Ok () -> broadcast state session emission
+              | Error _ -> Lwt.return_unit))
+        | Ok (Codex_client.Generation.Routed (Codex_client.Generation.Turn_finished completion)) ->
+          let message = match completion with
+            | Codex_client.Generation.Completed
+            | Codex_client.Generation.Interrupted -> Dream_protocol.ServerMessage.Generation_completed {
+                session_id = session.id;
+                turn_id = turn.id;
+              }
+            | Codex_client.Generation.Failed message -> Dream_protocol.ServerMessage.Generation_failed {
+                session_id = session.id;
+                turn_id = turn.id;
+                message;
+              }
+          in
+          finish_generation state session turn.id message
+    in
+    route active_sessions
+  | Codex_client.Client.Response _
+  | Codex_client.Client.Unexpected_response _
+  | Codex_client.Client.Protocol_error _ -> Lwt.return_unit
+
+let pump_once state =
+  match !(state.ready) with
+  | None -> Lwt.return_unit
+  | Some ready ->
+    Codex_client.Stdio.receive_line ready.process >>= function
+    | None ->
+      state.pump_running <- false;
+      Lwt.return_unit
+    | Some line ->
+      let event, client = Codex_client.Client.receive ready.client line in
+      state.ready := Some { ready with Bootstrap.client };
+      handle_generation_event state event
+
+let rec pump state =
+  if state.pump_running then
+    pump_once state >>= fun () -> pump state
+  else Lwt.return_unit
+
+let start_pump state =
+  if not state.pump_running then begin
+    state.pump_running <- true;
+    Lwt.async (fun () -> pump state)
+  end
+
 let event_reason = function
   | Ribosome_session.Session.Not_component_event -> "not a component event"
   | Ribosome_session.Session.Wrong_session -> "wrong session"
@@ -190,6 +291,7 @@ let handler state _ =
                 | Ok (_, generation_started) ->
                   Dream.send websocket (Dream_protocol.ServerMessage.encode_string generation_started)
                 | Error _ -> Dream.close_websocket ~code:1011 websocket) >>= fun () ->
+              start_pump state;
               drain state accepted.session.id accepted.connection_id websocket
             | Dream_protocol.ClientMessage.New_session _, None
             | Dream_protocol.ClientMessage.Resume_session _, _ ->
