@@ -1,0 +1,8 @@
+{
+  "kind": "component_event",
+  "session_id": "sess-123",
+  "revision": 5,
+  "event_id": "evt-1",
+  "target_id": "btn-1",
+  "component_kind": "click"
+}

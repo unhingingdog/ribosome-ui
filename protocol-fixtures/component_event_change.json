@@ -1,0 +1,9 @@
+{
+  "kind": "component_event",
+  "session_id": "sess-123",
+  "revision": 5,
+  "event_id": "evt-2",
+  "target_id": "input-1",
+  "component_kind": "change",
+  "value": "hello"
+}

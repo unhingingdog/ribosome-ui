@@ -3,3 +3,9 @@
  (modules ribosome_server_smoke test_support)
  (libraries ribosome_server_lib alcotest alcotest-lwt lwt)
  (package ribosome-server))
+
+(test
+ (name ui_protocol_test)
+ (modules ui_protocol_test)
+ (libraries ribosome_server_lib alcotest yojson)
+ (package ribosome-server))

@@ -5,4 +5,6 @@
    private library buildable and proves the dependency on [ribosome] links
    correctly. *)
 
+module Ui_protocol = Ui_protocol
+
 let core_version = Ribosome.version

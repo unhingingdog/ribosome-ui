@@ -1,0 +1,6 @@
+{
+  "kind": "template_update",
+  "session_id": "sess-123",
+  "revision": 6,
+  "tree": "{\"kind\":\"text\",\"id\":\"t1\",\"text_type\":\"Paragraph\",\"value\":\"world\"}"
+}

@@ -1,0 +1,6 @@
+{
+  "kind": "event_rejection",
+  "session_id": "sess-123",
+  "event_id": "evt-2",
+  "reason": "duplicate_event_id"
+}
