@@ -18,3 +18,15 @@ export {
   type SessionState,
   type SessionMap,
 } from "./session.js";
+export {
+  createKickoffManager,
+  type PendingKickoff,
+  type HarnessAttachMessage,
+  type KickoffManager,
+} from "./kickoff.js";
+export {
+  createAdapterContext,
+  createHooks,
+  createPlugin,
+  type AdapterContext,
+} from "./plugin.js";

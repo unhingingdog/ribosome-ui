@@ -35,6 +35,14 @@ export function createConnectionManager(
   let shouldReconnect = true;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   const reconnectDelay = 1000;
+  const pendingQueue: string[] = [];
+
+  function flushQueue() {
+    while (pendingQueue.length > 0) {
+      const msg = pendingQueue.shift()!;
+      ws!.send(msg);
+    }
+  }
 
   function connect() {
     state = "connecting";
@@ -42,6 +50,7 @@ export function createConnectionManager(
 
     ws.onopen = () => {
       state = "connected";
+      flushQueue();
       if (onOpen) onOpen();
     };
 
@@ -67,6 +76,8 @@ export function createConnectionManager(
   function send(data: string) {
     if (ws && state === "connected") {
       ws.send(data);
+    } else if (state !== "shutdown") {
+      pendingQueue.push(data);
     }
   }
 

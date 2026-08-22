@@ -55,6 +55,18 @@ describe("connection", () => {
     expect(messages).toEqual(["hello"]);
   });
 
+  it("queues messages until connected, then flushes", () => {
+    const fake = new FakeWebSocket();
+    const mgr = createConnectionManager("ws://test", () => fake, () => {});
+
+    mgr.send("queued-1");
+    mgr.send("queued-2");
+    expect(fake.sent).toEqual([]);
+
+    fake.fireOpen();
+    expect(fake.sent).toEqual(["queued-1", "queued-2"]);
+  });
+
   it("sends when connected", () => {
     const fake = new FakeWebSocket();
     const mgr = createConnectionManager(
