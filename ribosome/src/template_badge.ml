@@ -19,6 +19,33 @@ let string_of_badge_variant = function
 
 type t = { id : string; label : string; variant : badge_variant }
 
+let decode json =
+  let open Codec_decode in
+  let* id = field "id" string json in
+  let* label = field "label" string json in
+  let* variant =
+    field "variant"
+      (enum
+         [
+           ("Neutral", Neutral);
+           ("Success", Success);
+           ("Warning", Warning);
+           ("Error", Error);
+           ("Info", Info);
+         ])
+      json
+  in
+  Ok { id; label; variant }
+
+let encode t =
+  Codec_encode.obj
+    [
+      ("kind", `String "badge");
+      ("id", `String t.id);
+      ("label", `String t.label);
+      ("variant", `String (string_of_badge_variant t.variant));
+    ]
+
 let definition : Template_definition.t =
   {
     kind = "badge";

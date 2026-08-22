@@ -3,4 +3,4 @@
  (public_name ribosome)
  (synopsis
   "Typed template ADT, codec, validation, and reconciliation for generative UI")
- (libraries telomere))
+ (libraries telomere yojson))

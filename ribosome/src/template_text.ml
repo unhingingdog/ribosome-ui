@@ -23,6 +23,35 @@ let string_of_text_type = function
 
 type t = { id : string; text_type : text_type; value : string }
 
+let decode json =
+  let open Codec_decode in
+  let* id = field "id" string json in
+  let* text_type =
+    field "text_type"
+      (enum
+         [
+           ("Paragraph", Paragraph);
+           ("H1", H1);
+           ("H2", H2);
+           ("H3", H3);
+           ("H4", H4);
+           ("H5", H5);
+           ("H6", H6);
+         ])
+      json
+  in
+  let* value = field "value" string json in
+  Ok { id; text_type; value }
+
+let encode t =
+  Codec_encode.obj
+    [
+      ("kind", `String "text");
+      ("id", `String t.id);
+      ("text_type", `String (string_of_text_type t.text_type));
+      ("value", `String t.value);
+    ]
+
 let definition : Template_definition.t =
   {
     kind = "text";

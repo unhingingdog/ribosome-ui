@@ -14,6 +14,9 @@ module Diagram = Template_diagram
 module Code = Template_code
 module Definition = Template_definition
 module Registry = Template_registry
+module Codec_error = Codec_error
+module Decode = Codec_decode
+module Encode = Codec_encode
 
 type t =
   | Text of Template_text.t

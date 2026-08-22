@@ -2,6 +2,17 @@ open Template_definition
 
 type t = { id : string; label : string option }
 
+let decode json =
+  let open Codec_decode in
+  let* id = field "id" string json in
+  let* label = optional_field "label" string json in
+  Ok { id; label }
+
+let encode t =
+  Codec_encode.obj
+    ([ ("kind", `String "divider"); ("id", `String t.id) ]
+    @ Codec_encode.optional "label" t.label (fun s -> `String s) [])
+
 let definition : Template_definition.t =
   {
     kind = "divider";

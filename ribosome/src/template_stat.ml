@@ -7,6 +7,24 @@ type t = {
   secondary : string option;
 }
 
+let decode json =
+  let open Codec_decode in
+  let* id = field "id" string json in
+  let* label = field "label" string json in
+  let* value = field "value" string json in
+  let* secondary = optional_field "secondary" string json in
+  Ok { id; label; value; secondary }
+
+let encode t =
+  Codec_encode.obj
+    ([
+       ("kind", `String "stat");
+       ("id", `String t.id);
+       ("label", `String t.label);
+       ("value", `String t.value);
+     ]
+    @ Codec_encode.optional "secondary" t.secondary (fun s -> `String s) [])
+
 let definition : Template_definition.t =
   {
     kind = "stat";

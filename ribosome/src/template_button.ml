@@ -15,6 +15,29 @@ let string_of_action = function
 
 type t = { id : string; label : string; action : action; disabled : bool }
 
+let decode json =
+  let open Codec_decode in
+  let* id = field "id" string json in
+  let* label = field "label" string json in
+  let* action = field "action" string json in
+  let* disabled =
+    match optional_field "disabled" bool json with
+    | Ok (Some b) -> Ok b
+    | Ok None -> Ok false
+    | Error e -> Error e
+  in
+  Ok { id; label; action = action_of_string action; disabled }
+
+let encode t =
+  Codec_encode.obj
+    ([
+       ("kind", `String "button");
+       ("id", `String t.id);
+       ("label", `String t.label);
+       ("action", `String (string_of_action t.action));
+     ]
+    @ if t.disabled then [ ("disabled", `Bool true) ] else [])
+
 let definition : Template_definition.t =
   {
     kind = "button";
