@@ -1,0 +1,5 @@
+(executable
+ (name main)
+ (public_name ribosome-server)
+ (package ribosome-server)
+ (libraries ribosome_server_lib))

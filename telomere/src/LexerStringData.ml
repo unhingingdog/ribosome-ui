@@ -7,7 +7,8 @@ let is_string_data (state : json_state) : bool =
   match state with
   | Brace (InKey (Open | Escaped))
   | Brace (InValue (String (Open | Escaped)))
-  | Bracket (InValue (String (Open | Escaped))) -> true
+  | Bracket (InValue (String (Open | Escaped))) ->
+      true
   | _ -> false
 
 (* Parse a character that is content inside a string literal *)
@@ -17,12 +18,12 @@ let parse_string_data (state : json_state) :
   | Brace (InKey Open)
   | Brace (InValue (String Open))
   | Bracket (InValue (String Open)) ->
-    ok_unchanged state StringContent
-  | Brace (InKey Escaped) ->
-    Ok (StringContent, Brace (InKey Open))
+      ok_unchanged state StringContent
+  | Brace (InKey Escaped) -> Ok (StringContent, Brace (InKey Open))
   | Brace (InValue (String Escaped)) ->
-    Ok (StringContent, Brace (InValue (String Open)))
+      Ok (StringContent, Brace (InValue (String Open)))
   | Bracket (InValue (String Escaped)) ->
-    Ok (StringContent, Bracket (InValue (String Open)))
+      Ok (StringContent, Bracket (InValue (String Open)))
   | _ ->
-    Error (TokenParseErrorMisc "Unexpected character outside of an open string")
+      Error
+        (TokenParseErrorMisc "Unexpected character outside of an open string")

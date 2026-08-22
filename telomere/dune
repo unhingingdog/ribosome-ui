@@ -1,6 +1,0 @@
-(library
- (name telomere)
- (modes melange)
- (libraries melange melange-json)
- (preprocess
-  (pps melange.ppx melange-json.ppx)))

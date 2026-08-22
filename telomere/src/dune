@@ -1,0 +1,4 @@
+(library
+ (name telomere)
+ (public_name telomere)
+ (synopsis "Incremental JSON completion for streamed LLM output"))
