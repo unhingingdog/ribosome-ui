@@ -9,6 +9,7 @@ depends: [
   "alcotest" {with-test & >= "1.8.0"}
   "qcheck-core" {with-test & >= "0.22"}
   "qcheck-alcotest" {with-test & >= "0.22"}
+  "yojson" {with-test}
   "odoc" {with-doc}
 ]
 build: [

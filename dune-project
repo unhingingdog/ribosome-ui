@@ -10,7 +10,8 @@
   (ocaml (>= 5.2))
   (alcotest (and :with-test (>= 1.8.0)))
   (qcheck-core (and :with-test (>= 0.22)))
-  (qcheck-alcotest (and :with-test (>= 0.22)))))
+  (qcheck-alcotest (and :with-test (>= 0.22)))
+  (yojson (and :with-test))))
 
 (package
  (name ribosome)

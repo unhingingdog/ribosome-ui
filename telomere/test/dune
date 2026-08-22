@@ -15,3 +15,9 @@
  (modules processor_test)
  (libraries telomere alcotest)
  (package telomere))
+
+(test
+ (name property_test)
+ (modules property_test)
+ (libraries telomere alcotest qcheck-core qcheck-alcotest yojson)
+ (package telomere))
