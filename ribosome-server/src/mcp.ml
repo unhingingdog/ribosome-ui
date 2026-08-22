@@ -1,10 +1,16 @@
 (* Minimal MCP lifecycle handler.
 
    Implements the MCP 2025-11-25 subset: initialize, notifications/initialized,
-   ping, and tools/list. Operational requests are rejected before
-   initialization completes. *)
+   ping, tools/list, and the start tool. Operational requests are rejected
+   before initialization completes. *)
 
 let protocol_version = "2025-11-25"
+
+type config = {
+  registry : Session_registry.t;
+  id_gen : Session_registry.id_gen;
+  skill_loader : string -> string option;
+}
 
 type state = Uninitialized | Initialized
 
@@ -54,7 +60,76 @@ let initialize_result : Yojson.Safe.t =
       ("instructions", `String instructions);
     ]
 
-let handle (state : state) (msg : Jsonrpc.message) :
+let ( let* ) = Result.bind
+let raw_json_suffix = "\n\nYour next response must be raw template JSON only."
+
+let handle_start (config : config) (params : Yojson.Safe.t option) :
+    (Yojson.Safe.t, string) result =
+  let* params =
+    match params with
+    | Some (`Assoc _) as p -> Ok p
+    | Some _ -> Error "params must be an object"
+    | None -> Error "missing params"
+  in
+  let assoc = match params with Some (`Assoc a) -> a | _ -> [] in
+  let arguments =
+    match Stdlib.List.assoc_opt "arguments" assoc with
+    | Some (`Assoc a) -> a
+    | _ -> []
+  in
+  let mode =
+    match Stdlib.List.assoc_opt "mode" arguments with
+    | Some (`String m) -> m
+    | _ -> "ui"
+  in
+  let* harness_session_id =
+    match Stdlib.List.assoc_opt "_harness_session_id" arguments with
+    | Some (`String s) -> Ok s
+    | _ -> Error "missing _harness_session_id"
+  in
+  let* harness_nonce =
+    match Stdlib.List.assoc_opt "_nonce" arguments with
+    | Some (`String s) -> Ok s
+    | _ -> Error "missing _nonce"
+  in
+  let* mode_entry =
+    match Ribosome.Mode_registry.for_id mode with
+    | Some m -> Ok m
+    | None -> Error ("unknown mode: " ^ mode)
+  in
+  let skill_paths = mode_entry.Ribosome.Mode.skills in
+  let skill_body =
+    Stdlib.List.filter_map config.skill_loader skill_paths
+    |> String.concat "\n\n---\n\n"
+  in
+  let result =
+    Session_registry.start ~mode ~id_gen:config.id_gen ~registry:config.registry
+      ~harness_session_id ~harness_nonce ()
+  in
+  match result with
+  | Error `Duplicate -> Error "duplicate harness session"
+  | Ok entry ->
+      let content =
+        `List
+          [
+            `Assoc
+              [
+                ("type", `String "text");
+                ("text", `String (skill_body ^ raw_json_suffix));
+              ];
+          ]
+      in
+      let structured =
+        `Assoc
+          [
+            ("session_id", `String entry.Session_registry.session_id);
+            ("ui_nonce", `String entry.Session_registry.ui_nonce);
+            ("mode", `String entry.Session_registry.mode);
+          ]
+      in
+      Ok (`Assoc [ ("content", content); ("structuredContent", structured) ])
+
+let handle (config : config) (state : state) (msg : Jsonrpc.message) :
     state * Jsonrpc.message option =
   match state with
   | Uninitialized -> (
@@ -88,6 +163,35 @@ let handle (state : state) (msg : Jsonrpc.message) :
             Jsonrpc.make_success_response r.id (`Assoc [ ("tools", tools) ])
           in
           (Initialized, Some resp)
+      | Jsonrpc.Request r when r.method_ = "tools/call" -> (
+          let tool_name =
+            match r.params with
+            | Some (`Assoc a) -> (
+                match Stdlib.List.assoc_opt "name" a with
+                | Some (`String n) -> Some n
+                | _ -> None)
+            | _ -> None
+          in
+          match tool_name with
+          | Some "start" -> (
+              match handle_start config r.params with
+              | Ok result ->
+                  (Initialized, Some (Jsonrpc.make_success_response r.id result))
+              | Error msg ->
+                  ( Initialized,
+                    Some
+                      (Jsonrpc.make_error_response r.id Jsonrpc.Invalid_params
+                         msg) ))
+          | Some name ->
+              ( Initialized,
+                Some
+                  (Jsonrpc.make_error_response r.id Jsonrpc.Method_not_found
+                     ("unknown tool: " ^ name)) )
+          | None ->
+              ( Initialized,
+                Some
+                  (Jsonrpc.make_error_response r.id Jsonrpc.Invalid_params
+                     "missing tool name") ))
       | Jsonrpc.Request r ->
           let resp =
             Jsonrpc.make_error_response r.id Jsonrpc.Method_not_found
