@@ -1,0 +1,5 @@
+(test
+ (name telomere_smoke)
+ (modules telomere_smoke test_support)
+ (libraries telomere alcotest)
+ (package telomere))

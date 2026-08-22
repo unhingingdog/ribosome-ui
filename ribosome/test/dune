@@ -1,0 +1,5 @@
+(test
+ (name ribosome_smoke)
+ (modules ribosome_smoke test_support)
+ (libraries ribosome alcotest)
+ (package ribosome))

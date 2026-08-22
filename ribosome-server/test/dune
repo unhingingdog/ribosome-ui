@@ -1,0 +1,5 @@
+(test
+ (name ribosome_server_smoke)
+ (modules ribosome_server_smoke test_support)
+ (libraries ribosome_server_lib alcotest alcotest-lwt lwt)
+ (package ribosome-server))
