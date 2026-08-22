@@ -12,7 +12,7 @@ type component_event = {
   event_id : string;
   target_id : string;
   kind : component_kind;
-  value : string option;
+  value : Yojson.Safe.t option;
 }
 
 type cancel = { session_id : session_id }

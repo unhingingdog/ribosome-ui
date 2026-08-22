@@ -22,7 +22,7 @@ type component_event = {
   event_id : string;
   target_id : string;
   kind : component_kind;
-  value : string option;
+  value : Yojson.Safe.t option;
 }
 
 type cancel = { session_id : session_id }
@@ -99,7 +99,7 @@ let encode_message msg : Yojson.Safe.t =
            ("target_id", `String e.target_id);
            ("component_kind", `String (component_kind_to_string e.kind));
          ]
-        @ match e.value with None -> [] | Some v -> [ ("value", `String v) ])
+        @ match e.value with None -> [] | Some v -> [ ("value", v) ])
   | Cancel c ->
       `Assoc
         [ ("kind", `String "cancel"); ("session_id", `String c.session_id) ]
@@ -176,11 +176,7 @@ let decode_message json : (message, string) result =
       let* target_id = string_field "target_id" fields in
       let* component_kind = string_field "component_kind" fields in
       let* kind = component_kind_of_string component_kind in
-      let value =
-        match Stdlib.List.assoc_opt "value" fields with
-        | Some (`String v) -> Some v
-        | _ -> None
-      in
+      let value = Stdlib.List.assoc_opt "value" fields in
       Ok
         (ComponentEvent
            { session_id; revision; event_id; target_id; kind; value })
