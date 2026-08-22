@@ -15,3 +15,9 @@
  (modules harness_protocol_test)
  (libraries ribosome_server_lib alcotest yojson)
  (package ribosome-server))
+
+(test
+ (name jsonrpc_test)
+ (modules jsonrpc_test)
+ (libraries ribosome_server_lib alcotest yojson)
+ (package ribosome-server))

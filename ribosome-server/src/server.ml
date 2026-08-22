@@ -7,5 +7,6 @@
 
 module Ui_protocol = Ui_protocol
 module Harness_protocol = Harness_protocol
+module Jsonrpc = Jsonrpc
 
 let core_version = Ribosome.version
