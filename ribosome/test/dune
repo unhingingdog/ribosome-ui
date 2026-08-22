@@ -3,3 +3,9 @@
  (modules ribosome_smoke test_support)
  (libraries ribosome alcotest)
  (package ribosome))
+
+(test
+ (name template_test)
+ (modules template_test)
+ (libraries ribosome alcotest)
+ (package ribosome))

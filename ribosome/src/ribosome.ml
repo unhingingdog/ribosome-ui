@@ -5,5 +5,7 @@
    the native library buildable and proves the dependency on [telomere] links
    correctly across the two packages. *)
 
+module Template = Template
+
 let processor = Telomere.Processor.create_processor
 let version = "0.0.0"
