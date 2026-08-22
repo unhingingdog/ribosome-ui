@@ -11,6 +11,7 @@ module Reconcile = Template_reconcile
 module Event = Template_event
 module Incremental = Incremental
 module Mode = Mode
+module Mode_registry = Mode_registry
 module Session = Session
 
 let processor = Telomere.Processor.create_processor

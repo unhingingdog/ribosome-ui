@@ -1,3 +1,3 @@
-type t = { id : string }
+type t = { id : string; skills : string list }
 
 val ui : t

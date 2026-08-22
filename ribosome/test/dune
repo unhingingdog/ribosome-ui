@@ -63,3 +63,9 @@
  (modules session_event_test)
  (libraries ribosome alcotest)
  (package ribosome))
+
+(test
+ (name mode_test)
+ (modules mode_test)
+ (libraries ribosome alcotest)
+ (package ribosome))
