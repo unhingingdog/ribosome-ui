@@ -248,4 +248,119 @@ describe("plugin hooks — kickoff correlation", () => {
     expect(fake.closed).toBe(true);
     expect(ctx.harnessConn).toBeNull();
   });
+
+  it("forwards five assistant deltas as five harness delta messages", async () => {
+    const { ctx, fake } = makeCtx();
+    const hooks = createHooks(ctx);
+
+    await hooks["tool.execute.before"]!(
+      { tool: "start", sessionID: "oc-1", callID: "call-1" },
+      { args: {} },
+    );
+    await hooks["tool.execute.after"]!(
+      { tool: "start", sessionID: "oc-1", callID: "call-1", args: {} },
+      {
+        title: "",
+        output: JSON.stringify({ session_id: "rs-1", ui_nonce: "u1" }),
+        metadata: {},
+      },
+    );
+    fake.fireOpen();
+
+    const deltaEvents = [
+      { part: { sessionID: "oc-1", messageID: "msg-1", type: "text", id: "p1" }, delta: "H" },
+      { part: { sessionID: "oc-1", messageID: "msg-1", type: "text", id: "p1" }, delta: "e" },
+      { part: { sessionID: "oc-1", messageID: "msg-1", type: "text", id: "p1" }, delta: "l" },
+      { part: { sessionID: "oc-1", messageID: "msg-1", type: "text", id: "p1" }, delta: "l" },
+      { part: { sessionID: "oc-1", messageID: "msg-1", type: "text", id: "p1" }, delta: "o" },
+    ];
+
+    for (const ev of deltaEvents) {
+      await hooks.event!({
+        event: { type: "message.part.updated", properties: ev } as any,
+      });
+    }
+
+    const deltaMsgs = fake.sent
+      .slice(1)
+      .map((s) => JSON.parse(s))
+      .filter((m) => m.kind === "delta");
+
+    expect(deltaMsgs.length).toBe(5);
+    expect(deltaMsgs.map((m) => m.seq)).toEqual([0, 1, 2, 3, 4]);
+    expect(deltaMsgs.map((m) => m.content)).toEqual(["H", "e", "l", "l", "o"]);
+    expect(deltaMsgs.every((m) => m.generation_id === "msg-1")).toBe(true);
+  });
+
+  it("completes generation on session.idle after deltas", async () => {
+    const { ctx, fake } = makeCtx();
+    const hooks = createHooks(ctx);
+
+    await hooks["tool.execute.before"]!(
+      { tool: "start", sessionID: "oc-1", callID: "call-1" },
+      { args: {} },
+    );
+    await hooks["tool.execute.after"]!(
+      { tool: "start", sessionID: "oc-1", callID: "call-1", args: {} },
+      {
+        title: "",
+        output: JSON.stringify({ session_id: "rs-1", ui_nonce: "u1" }),
+        metadata: {},
+      },
+    );
+    fake.fireOpen();
+
+    await hooks.event!({
+      event: {
+        type: "message.part.updated",
+        properties: { part: { sessionID: "oc-1", messageID: "msg-1", type: "text", id: "p1" }, delta: "Hi" },
+      } as any,
+    });
+    await hooks.event!({
+      event: { type: "session.idle", properties: { sessionID: "oc-1" } } as any,
+    });
+
+    const sent = fake.sent.map((s) => JSON.parse(s));
+    const completed = sent.find((m) => m.kind === "generation_completed");
+    expect(completed).toBeDefined();
+    expect(completed.generation_id).toBe("msg-1");
+  });
+
+  it("reports generation failure on session.error", async () => {
+    const { ctx, fake } = makeCtx();
+    const hooks = createHooks(ctx);
+
+    await hooks["tool.execute.before"]!(
+      { tool: "start", sessionID: "oc-1", callID: "call-1" },
+      { args: {} },
+    );
+    await hooks["tool.execute.after"]!(
+      { tool: "start", sessionID: "oc-1", callID: "call-1", args: {} },
+      {
+        title: "",
+        output: JSON.stringify({ session_id: "rs-1", ui_nonce: "u1" }),
+        metadata: {},
+      },
+    );
+    fake.fireOpen();
+
+    await hooks.event!({
+      event: {
+        type: "message.part.updated",
+        properties: { part: { sessionID: "oc-1", messageID: "msg-1", type: "text", id: "p1" }, delta: "Hi" },
+      } as any,
+    });
+    await hooks.event!({
+      event: {
+        type: "session.error",
+        properties: { sessionID: "oc-1", error: { message: "timeout" } },
+      } as any,
+    });
+
+    const sent = fake.sent.map((s) => JSON.parse(s));
+    const failed = sent.find((m) => m.kind === "generation_failed");
+    expect(failed).toBeDefined();
+    expect(failed.generation_id).toBe("msg-1");
+    expect(failed.reason).toContain("timeout");
+  });
 });

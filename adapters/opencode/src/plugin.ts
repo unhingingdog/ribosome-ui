@@ -14,13 +14,20 @@ import {
   type ConnectionManager,
   type WebSocketFactory,
 } from "./connection.js";
+import {
+  createDeltaForwarder,
+  type DeltaForwarder,
+} from "./delta.js";
 
 export interface AdapterContext {
   config: AdapterConfig;
   sessions: SessionMap;
   kickoff: KickoffManager;
+  delta: DeltaForwarder;
   harnessConn: ConnectionManager | null;
   wsFactory: WebSocketFactory;
+  activeSessionIds: Set<string>;
+  harnessSessionIdMap: Map<string, string>;
 }
 
 export function createAdapterContext(
@@ -29,12 +36,18 @@ export function createAdapterContext(
 ): AdapterContext {
   const sessions = createSessionStore();
   const kickoff = createKickoffManager(sessions);
+  const activeSessionIds = new Set<string>();
+  const harnessSessionIdMap = new Map<string, string>();
+  const delta = createDeltaForwarder(activeSessionIds, harnessSessionIdMap);
   return {
     config,
     sessions,
     kickoff,
+    delta,
     harnessConn: null,
     wsFactory,
+    activeSessionIds,
+    harnessSessionIdMap,
   };
 }
 
@@ -96,22 +109,59 @@ export function createHooks(ctx: AdapterContext): Hooks {
       }
 
       ctx.harnessConn.send(JSON.stringify(attachMsg));
+
+      ctx.activeSessionIds.add(input.sessionID);
+      ctx.harnessSessionIdMap.set(input.sessionID, result.session_id);
     },
 
     event: async (input) => {
       const ev = input.event;
+
+      if (ev.type === "message.part.updated") {
+        const part = ev.properties.part;
+        const deltaStr = ev.properties.delta;
+        const msg = ctx.delta.handlePartDelta(
+          part.sessionID,
+          part.messageID,
+          part.type,
+          deltaStr,
+        );
+        if (msg && ctx.harnessConn) {
+          ctx.harnessConn.send(JSON.stringify(msg));
+        }
+        return;
+      }
+
       if (ev.type === "session.idle") {
         const sessionID = ev.properties.sessionID;
         const session = ctx.sessions.get(sessionID);
         if (session) {
           session.pendingKickoff = false;
         }
+        const completed = ctx.delta.handleSessionIdle(sessionID);
+        if (completed && ctx.harnessConn) {
+          ctx.harnessConn.send(JSON.stringify(completed));
+        }
+        return;
       }
+
       if (ev.type === "session.error") {
         const sessionID = ev.properties.sessionID;
         if (sessionID) {
+          const failed = ctx.delta.handleSessionError(
+            sessionID,
+            ev.properties.error
+              ? JSON.stringify(ev.properties.error)
+              : undefined,
+          );
+          if (failed && ctx.harnessConn) {
+            ctx.harnessConn.send(JSON.stringify(failed));
+          }
           ctx.kickoff.clearActive(sessionID);
+          ctx.activeSessionIds.delete(sessionID);
+          ctx.harnessSessionIdMap.delete(sessionID);
         }
+        return;
       }
     },
 

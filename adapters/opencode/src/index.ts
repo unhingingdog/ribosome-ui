@@ -25,6 +25,16 @@ export {
   type KickoffManager,
 } from "./kickoff.js";
 export {
+  createDeltaForwarder,
+  type DeltaForwarder,
+  type HarnessDeltaMessage,
+  type HarnessGenerationCompletedMessage,
+  type HarnessGenerationFailedMessage,
+  type HarnessOutboundMessage,
+  type GenerationState,
+  type GenerationMap,
+} from "./delta.js";
+export {
   createAdapterContext,
   createHooks,
   createPlugin,
