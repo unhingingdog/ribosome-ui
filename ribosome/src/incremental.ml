@@ -6,12 +6,8 @@ type state = {
   committed : Template.t option;
 }
 
-let create () =
-  {
-    processor = Telomere.Processor.create_processor ();
-    buffer = "";
-    committed = None;
-  }
+let create ?committed () =
+  { processor = Telomere.Processor.create_processor (); buffer = ""; committed }
 
 let decode_candidate buffer suffix =
   let json_str = buffer ^ suffix in

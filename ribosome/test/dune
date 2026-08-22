@@ -51,3 +51,9 @@
  (modules incremental_test)
  (libraries ribosome alcotest)
  (package ribosome))
+
+(test
+ (name session_test)
+ (modules session_test)
+ (libraries ribosome alcotest)
+ (package ribosome))
