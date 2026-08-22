@@ -3,3 +3,15 @@
  (modules telomere_smoke test_support)
  (libraries telomere alcotest)
  (package telomere))
+
+(test
+ (name balancer_test)
+ (modules balancer_test test_support)
+ (libraries telomere alcotest)
+ (package telomere))
+
+(test
+ (name processor_test)
+ (modules processor_test)
+ (libraries telomere alcotest)
+ (package telomere))
