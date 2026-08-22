@@ -7,6 +7,7 @@
 
 module Template = Template
 module Validate = Template_validate
+module Reconcile = Template_reconcile
 
 let processor = Telomere.Processor.create_processor
 let version = "0.0.0"

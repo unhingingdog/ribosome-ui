@@ -33,3 +33,9 @@
  (modules template_validate_test)
  (libraries ribosome alcotest)
  (package ribosome))
+
+(test
+ (name template_reconcile_test)
+ (modules template_reconcile_test)
+ (libraries ribosome alcotest)
+ (package ribosome))
