@@ -27,3 +27,9 @@
  (modules mcp_test)
  (libraries ribosome_server_lib alcotest yojson)
  (package ribosome-server))
+
+(test
+ (name session_registry_test)
+ (modules session_registry_test)
+ (libraries ribosome_server_lib alcotest)
+ (package ribosome-server))

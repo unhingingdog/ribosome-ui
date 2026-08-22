@@ -1,8 +1,12 @@
-(* Minimal session registry.
+(* Session registry.
 
    Keyed by Ribosome session ID with a secondary index from harness session
-   ID. Supports create, find, and duplicate detection. Connection tracking,
-   attach/detach, and reconnect are added in Task 5.6. *)
+   ID. Stores UI and harness connection registrations separately. Mutation is
+   behind a small runtime API. IDs and nonces are injectable in tests. *)
+
+type conn_id = string
+type ui_conn = { conn_id : conn_id; revision : int }
+type harness_conn = { conn_id : conn_id }
 
 type entry = {
   session_id : string;
@@ -10,6 +14,8 @@ type entry = {
   harness_session_id : string;
   harness_nonce : string;
   ui_nonce : string;
+  mutable ui_connections : ui_conn list;
+  mutable harness_connection : harness_conn option;
 }
 
 type t = {
@@ -35,8 +41,70 @@ let start ?(mode = "ui") ~(id_gen : id_gen) ~(registry : t)
       let session_id = id_gen.gen_session_id () in
       let ui_nonce = id_gen.gen_ui_nonce () in
       let entry =
-        { session_id; mode; harness_session_id; harness_nonce; ui_nonce }
+        {
+          session_id;
+          mode;
+          harness_session_id;
+          harness_nonce;
+          ui_nonce;
+          ui_connections = [];
+          harness_connection = None;
+        }
       in
       Hashtbl.add registry.sessions session_id entry;
       Hashtbl.add registry.by_harness harness_session_id session_id;
       Ok entry
+
+let attach_ui registry session_id ~conn_id ~revision =
+  match find registry session_id with
+  | None -> Error `NotFound
+  | Some entry ->
+      entry.ui_connections <- { conn_id; revision } :: entry.ui_connections;
+      Ok ()
+
+let detach_ui registry session_id ~conn_id =
+  match find registry session_id with
+  | None -> Error `NotFound
+  | Some entry ->
+      entry.ui_connections <-
+        Stdlib.List.filter
+          (fun (c : ui_conn) -> c.conn_id <> conn_id)
+          entry.ui_connections;
+      Ok ()
+
+let attach_harness registry session_id ~conn_id =
+  match find registry session_id with
+  | None -> Error `NotFound
+  | Some entry ->
+      entry.harness_connection <- Some ({ conn_id } : harness_conn);
+      Ok ()
+
+let detach_harness registry session_id =
+  match find registry session_id with
+  | None -> Error `NotFound
+  | Some entry ->
+      entry.harness_connection <- None;
+      Ok ()
+
+let reconnect_ui registry session_id ~conn_id ~revision =
+  match find registry session_id with
+  | None -> Error `NotFound
+  | Some entry ->
+      let updated =
+        Stdlib.List.map
+          (fun (c : ui_conn) ->
+            if c.conn_id = conn_id then { conn_id; revision } else c)
+          entry.ui_connections
+      in
+      entry.ui_connections <- updated;
+      Ok ()
+
+let ui_connections registry session_id =
+  match find registry session_id with
+  | None -> []
+  | Some entry -> entry.ui_connections
+
+let harness_connection registry session_id =
+  match find registry session_id with
+  | None -> None
+  | Some entry -> entry.harness_connection
