@@ -21,3 +21,9 @@
  (modules jsonrpc_test)
  (libraries ribosome_server_lib alcotest yojson)
  (package ribosome-server))
+
+(test
+ (name mcp_test)
+ (modules mcp_test)
+ (libraries ribosome_server_lib alcotest yojson)
+ (package ribosome-server))
