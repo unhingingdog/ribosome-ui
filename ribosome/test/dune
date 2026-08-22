@@ -27,3 +27,9 @@
  (modules composite_codec_test)
  (libraries ribosome alcotest yojson)
  (package ribosome))
+
+(test
+ (name template_validate_test)
+ (modules template_validate_test)
+ (libraries ribosome alcotest)
+ (package ribosome))

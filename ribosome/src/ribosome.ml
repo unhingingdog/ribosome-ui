@@ -6,6 +6,7 @@
    correctly across the two packages. *)
 
 module Template = Template
+module Validate = Template_validate
 
 let processor = Telomere.Processor.create_processor
 let version = "0.0.0"
