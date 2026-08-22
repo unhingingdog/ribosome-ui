@@ -1,3 +1,5 @@
+val definition : Template_definition.t
+
 type point = { x : int; y : int }
 type size = { width : int; height : int }
 

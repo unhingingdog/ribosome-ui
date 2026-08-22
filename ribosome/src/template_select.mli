@@ -6,3 +6,5 @@ type t = {
   options : option_ list;
   selected : string option;
 }
+
+val definition : Template_definition.t

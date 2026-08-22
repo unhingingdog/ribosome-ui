@@ -306,6 +306,70 @@ let test_tone_roundtrip () =
         (Tone.to_string (Tone.of_string (Tone.to_string t))))
     [ Tone.Default; Positive; Negative; Warning; Info ]
 
+let test_registry_covers_all_variants () =
+  let variant_kinds =
+    [
+      "text";
+      "image";
+      "badge";
+      "stat";
+      "divider";
+      "diagram";
+      "code";
+      "container";
+      "list";
+      "submittable";
+    ]
+  in
+  Stdlib.List.iter
+    (fun kind ->
+      Alcotest.(check bool)
+        (kind ^ " in registry") true
+        (Stdlib.List.mem kind
+           (Stdlib.List.map (fun (d : Definition.t) -> d.kind) Registry.all)))
+    variant_kinds
+
+let test_registry_includes_nested_only () =
+  let nested_kinds = [ "input"; "select"; "button" ] in
+  Stdlib.List.iter
+    (fun kind ->
+      Alcotest.(check bool)
+        (kind ^ " in registry") true
+        (Stdlib.List.mem kind
+           (Stdlib.List.map (fun (d : Definition.t) -> d.kind) Registry.all)))
+    nested_kinds
+
+let test_registry_kinds_are_unique () =
+  let kinds = Stdlib.List.map (fun (d : Definition.t) -> d.kind) Registry.all in
+  Stdlib.List.iter
+    (fun kind ->
+      let count =
+        Stdlib.List.fold_left
+          (fun acc k -> if k = kind then acc + 1 else acc)
+          0 kinds
+      in
+      Alcotest.(check int) (kind ^ " unique") 1 count)
+    kinds
+
+let test_registry_top_level_excludes_nested () =
+  let top_kinds =
+    Stdlib.List.map (fun (d : Definition.t) -> d.kind) Registry.top_level
+  in
+  Stdlib.List.iter
+    (fun kind ->
+      Alcotest.(check bool)
+        (kind ^ " not top-level") false
+        (Stdlib.List.mem kind top_kinds))
+    [ "input"; "select"; "button" ]
+
+let test_registry_for_kind () =
+  Alcotest.(check string)
+    "for_kind text" "text"
+    (match Registry.for_kind "text" with Some d -> d.kind | None -> "MISSING");
+  Alcotest.(check bool)
+    "for_kind unknown" true
+    (Registry.for_kind "nonexistent" = None)
+
 let () =
   Alcotest.run "ribosome-template"
     [
@@ -328,5 +392,17 @@ let () =
           Alcotest.test_case "tone roundtrip" `Quick test_tone_roundtrip;
           Alcotest.test_case "id helper" `Quick test_id_helper;
           Alcotest.test_case "children helper" `Quick test_children_helper;
+        ] );
+      ( "registry",
+        [
+          Alcotest.test_case "covers all variants" `Quick
+            test_registry_covers_all_variants;
+          Alcotest.test_case "includes nested-only" `Quick
+            test_registry_includes_nested_only;
+          Alcotest.test_case "kinds are unique" `Quick
+            test_registry_kinds_are_unique;
+          Alcotest.test_case "top-level excludes nested" `Quick
+            test_registry_top_level_excludes_nested;
+          Alcotest.test_case "for_kind lookup" `Quick test_registry_for_kind;
         ] );
     ]

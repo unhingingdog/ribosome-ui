@@ -12,6 +12,8 @@ module Submittable = Template_submittable
 module Tone = Template_tone
 module Diagram = Template_diagram
 module Code = Template_code
+module Definition = Template_definition
+module Registry = Template_registry
 
 type t =
   | Text of Template_text.t

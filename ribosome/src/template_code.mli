@@ -1,3 +1,5 @@
+val definition : Template_definition.t
+
 type highlight = { start_line : int; end_line : int; tone : Template_tone.t }
 
 type t = {
