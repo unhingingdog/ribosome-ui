@@ -1,8 +1,6 @@
 {
-  "kind": "session_state",
+  "kind": "user_turn",
   "session_id": "sess-123",
-  "mode": "ui",
-  "revision": 5,
   "tree": "{\"kind\":\"text\",\"id\":\"t1\",\"text_type\":\"Paragraph\",\"value\":\"hello\"}",
-  "generation_id": "gen-1"
+  "event": "{\"event_id\":\"evt-1\",\"kind\":\"submit\",\"target_id\":\"form-1\"}"
 }

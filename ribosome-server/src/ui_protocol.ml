@@ -32,7 +32,9 @@ type session_state = {
   session_id : session_id;
   mode : string;
   revision : int;
-  tree : string option; (* JSON-encoded template; None when no tree exists yet *)
+  tree : string option;
+      (* JSON-encoded template; None when no tree exists yet *)
+  generation_id : string option; (* active generation if any *)
 }
 
 type template_update = {
@@ -40,12 +42,6 @@ type template_update = {
   revision : int;
   tree : string; (* JSON-encoded template *)
 }
-
-type generation_lifecycle =
-  | Started of { session_id : session_id; generation_id : string }
-  | Delta of { session_id : session_id; generation_id : string; seq : int }
-  | Completed of { session_id : session_id; generation_id : string }
-  | Failed of { session_id : session_id; generation_id : string }
 
 type event_rejection_reason = StaleRevision | DuplicateEventId
 
@@ -62,7 +58,6 @@ type message =
   | Disconnect of disconnect
   | SessionState of session_state
   | TemplateUpdate of template_update
-  | GenerationLifecycle of generation_lifecycle
   | EventRejection of event_rejection
 
 let component_kind_to_string = function
@@ -119,7 +114,15 @@ let encode_message msg : Yojson.Safe.t =
            ("mode", `String s.mode);
            ("revision", `Int s.revision);
          ]
-        @ match s.tree with None -> [] | Some t -> [ ("tree", `String t) ])
+        @
+        match s.tree with
+        | None -> []
+        | Some t -> (
+            [ ("tree", `String t) ]
+            @
+            match s.generation_id with
+            | None -> []
+            | Some g -> [ ("generation_id", `String g) ]))
   | TemplateUpdate t ->
       `Assoc
         [
@@ -128,37 +131,6 @@ let encode_message msg : Yojson.Safe.t =
           ("revision", `Int t.revision);
           ("tree", `String t.tree);
         ]
-  | GenerationLifecycle g -> (
-      match g with
-      | Started { session_id; generation_id } ->
-          `Assoc
-            [
-              ("kind", `String "generation_started");
-              ("session_id", `String session_id);
-              ("generation_id", `String generation_id);
-            ]
-      | Delta { session_id; generation_id; seq } ->
-          `Assoc
-            [
-              ("kind", `String "generation_delta");
-              ("session_id", `String session_id);
-              ("generation_id", `String generation_id);
-              ("seq", `Int seq);
-            ]
-      | Completed { session_id; generation_id } ->
-          `Assoc
-            [
-              ("kind", `String "generation_completed");
-              ("session_id", `String session_id);
-              ("generation_id", `String generation_id);
-            ]
-      | Failed { session_id; generation_id } ->
-          `Assoc
-            [
-              ("kind", `String "generation_failed");
-              ("session_id", `String session_id);
-              ("generation_id", `String generation_id);
-            ])
   | EventRejection r ->
       `Assoc
         [
@@ -227,29 +199,17 @@ let decode_message json : (message, string) result =
         | Some (`String t) -> Some t
         | _ -> None
       in
-      Ok (SessionState { session_id; mode; revision; tree })
+      let generation_id =
+        match Stdlib.List.assoc_opt "generation_id" fields with
+        | Some (`String g) -> Some g
+        | _ -> None
+      in
+      Ok (SessionState { session_id; mode; revision; tree; generation_id })
   | "template_update" ->
       let* session_id = string_field "session_id" fields in
       let* revision = int_field "revision" fields in
       let* tree = string_field "tree" fields in
       Ok (TemplateUpdate { session_id; revision; tree })
-  | "generation_started" ->
-      let* session_id = string_field "session_id" fields in
-      let* generation_id = string_field "generation_id" fields in
-      Ok (GenerationLifecycle (Started { session_id; generation_id }))
-  | "generation_delta" ->
-      let* session_id = string_field "session_id" fields in
-      let* generation_id = string_field "generation_id" fields in
-      let* seq = int_field "seq" fields in
-      Ok (GenerationLifecycle (Delta { session_id; generation_id; seq }))
-  | "generation_completed" ->
-      let* session_id = string_field "session_id" fields in
-      let* generation_id = string_field "generation_id" fields in
-      Ok (GenerationLifecycle (Completed { session_id; generation_id }))
-  | "generation_failed" ->
-      let* session_id = string_field "session_id" fields in
-      let* generation_id = string_field "generation_id" fields in
-      Ok (GenerationLifecycle (Failed { session_id; generation_id }))
   | "event_rejection" ->
       let* session_id = string_field "session_id" fields in
       let* event_id = string_field "event_id" fields in

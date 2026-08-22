@@ -9,3 +9,9 @@
  (modules ui_protocol_test)
  (libraries ribosome_server_lib alcotest yojson)
  (package ribosome-server))
+
+(test
+ (name harness_protocol_test)
+ (modules harness_protocol_test)
+ (libraries ribosome_server_lib alcotest yojson)
+ (package ribosome-server))

@@ -25,7 +25,7 @@ let read_fixture name =
 
 let decode json_str =
   match Yojson.Safe.from_string json_str with
-  | json -> Ribosome_server_lib.Ui_protocol.decode_message json
+  | json -> Ribosome_server_lib.Harness_protocol.decode_message json
   | exception Yojson.Json_error msg -> Error ("json parse error: " ^ msg)
 
 let roundtrip name expected =
@@ -36,10 +36,10 @@ let roundtrip name expected =
     (Result.map (fun _ -> "decoded") decoded);
   let encoded =
     match decoded with
-    | Ok msg -> Ribosome_server_lib.Ui_protocol.encode_message msg
+    | Ok msg -> Ribosome_server_lib.Harness_protocol.encode_message msg
     | Error e -> Alcotest.fail ("decode failed: " ^ e)
   in
-  let redecoded = Ribosome_server_lib.Ui_protocol.decode_message encoded in
+  let redecoded = Ribosome_server_lib.Harness_protocol.decode_message encoded in
   Alcotest.(check (result string string))
     ("roundtrip " ^ name)
     (Result.map (fun _ -> "decoded") decoded)
@@ -49,24 +49,18 @@ let roundtrip name expected =
     (Ok expected)
     (Result.map (fun _ -> expected) redecoded)
 
-let test_attach () = roundtrip "attach" "attach"
+let test_attach () = roundtrip "harness_attach" "attach"
+let test_delta () = roundtrip "harness_delta" "delta"
 
-let test_component_event_click () =
-  roundtrip "component_event_click" "component_event"
+let test_generation_completed () =
+  roundtrip "harness_generation_completed" "generation_completed"
 
-let test_component_event_change () =
-  roundtrip "component_event_change" "component_event"
+let test_generation_failed () =
+  roundtrip "harness_generation_failed" "generation_failed"
 
-let test_cancel () = roundtrip "cancel" "cancel"
-let test_disconnect () = roundtrip "disconnect" "disconnect"
-let test_session_state () = roundtrip "session_state" "session_state"
-let test_template_update () = roundtrip "template_update" "template_update"
-
-let test_event_rejection_stale () =
-  roundtrip "event_rejection_stale" "event_rejection"
-
-let test_event_rejection_duplicate () =
-  roundtrip "event_rejection_duplicate" "event_rejection"
+let test_user_turn () = roundtrip "harness_user_turn" "user_turn"
+let test_ack () = roundtrip "harness_ack" "ack"
+let test_rejection () = roundtrip "harness_rejection" "rejection"
 
 let string_contains haystack needle =
   let rec search i =
@@ -78,7 +72,7 @@ let string_contains haystack needle =
 
 let test_unknown_kind () =
   let json = `Assoc [ ("kind", `String "unknown") ] in
-  match Ribosome_server_lib.Ui_protocol.decode_message json with
+  match Ribosome_server_lib.Harness_protocol.decode_message json with
   | Ok _ -> Alcotest.fail "expected error for unknown kind"
   | Error e ->
       Alcotest.(check bool)
@@ -87,26 +81,21 @@ let test_unknown_kind () =
 
 let test_version () =
   Alcotest.(check string)
-    "version constant" "0.0.0" Ribosome_server_lib.Ui_protocol.version
+    "version constant" "0.0.0" Ribosome_server_lib.Harness_protocol.version
 
 let () =
-  Alcotest.run "ribosome-ui-protocol"
+  Alcotest.run "ribosome-harness-protocol"
     [
       ( "fixtures",
         [
           Alcotest.test_case "attach" `Quick test_attach;
-          Alcotest.test_case "component_event_click" `Quick
-            test_component_event_click;
-          Alcotest.test_case "component_event_change" `Quick
-            test_component_event_change;
-          Alcotest.test_case "cancel" `Quick test_cancel;
-          Alcotest.test_case "disconnect" `Quick test_disconnect;
-          Alcotest.test_case "session_state" `Quick test_session_state;
-          Alcotest.test_case "template_update" `Quick test_template_update;
-          Alcotest.test_case "event_rejection_stale" `Quick
-            test_event_rejection_stale;
-          Alcotest.test_case "event_rejection_duplicate" `Quick
-            test_event_rejection_duplicate;
+          Alcotest.test_case "delta" `Quick test_delta;
+          Alcotest.test_case "generation_completed" `Quick
+            test_generation_completed;
+          Alcotest.test_case "generation_failed" `Quick test_generation_failed;
+          Alcotest.test_case "user_turn" `Quick test_user_turn;
+          Alcotest.test_case "ack" `Quick test_ack;
+          Alcotest.test_case "rejection" `Quick test_rejection;
         ] );
       ("errors", [ Alcotest.test_case "unknown kind" `Quick test_unknown_kind ]);
       ("meta", [ Alcotest.test_case "version" `Quick test_version ]);

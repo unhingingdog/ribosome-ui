@@ -1,0 +1,7 @@
+{
+  "kind": "delta",
+  "session_id": "sess-123",
+  "generation_id": "gen-1",
+  "seq": 1,
+  "content": "{\"kind\":\"text"
+}

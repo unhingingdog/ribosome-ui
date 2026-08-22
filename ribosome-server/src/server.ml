@@ -6,5 +6,6 @@
    correctly. *)
 
 module Ui_protocol = Ui_protocol
+module Harness_protocol = Harness_protocol
 
 let core_version = Ribosome.version

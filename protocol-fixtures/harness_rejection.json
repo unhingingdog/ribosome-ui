@@ -1,0 +1,5 @@
+{
+  "kind": "rejection",
+  "session_id": "sess-123",
+  "reason": "invalid_sequence"
+}

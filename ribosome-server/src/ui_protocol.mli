@@ -23,6 +23,7 @@ type session_state = {
   mode : string;
   revision : int;
   tree : string option;
+  generation_id : string option;
 }
 
 type template_update = {
@@ -30,12 +31,6 @@ type template_update = {
   revision : int;
   tree : string;
 }
-
-type generation_lifecycle =
-  | Started of { session_id : session_id; generation_id : string }
-  | Delta of { session_id : session_id; generation_id : string; seq : int }
-  | Completed of { session_id : session_id; generation_id : string }
-  | Failed of { session_id : session_id; generation_id : string }
 
 type event_rejection_reason = StaleRevision | DuplicateEventId
 
@@ -52,7 +47,6 @@ type message =
   | Disconnect of disconnect
   | SessionState of session_state
   | TemplateUpdate of template_update
-  | GenerationLifecycle of generation_lifecycle
   | EventRejection of event_rejection
 
 val encode_message : message -> Yojson.Safe.t

@@ -1,0 +1,6 @@
+{
+  "kind": "attach",
+  "session_id": "sess-123",
+  "harness_session_id": "harness-456",
+  "nonce": "nonce-abc"
+}
