@@ -2,4 +2,4 @@
  (name main)
  (public_name ribosome-server)
  (package ribosome-server)
- (libraries ribosome_server_lib))
+ (libraries ribosome_server_lib cmdliner dream lwt yojson))

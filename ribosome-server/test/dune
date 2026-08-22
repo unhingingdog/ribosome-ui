@@ -51,3 +51,9 @@
  (modules websocket_transport_test)
  (libraries ribosome_server_lib alcotest alcotest-lwt lwt yojson dream)
  (package ribosome-server))
+
+(test
+ (name exec_smoke_test)
+ (modules exec_smoke_test)
+ (libraries ribosome_server_lib alcotest alcotest-lwt lwt)
+ (package ribosome-server))

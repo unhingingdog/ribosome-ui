@@ -15,5 +15,6 @@ module Ui_runtime = Ui_runtime
 module Harness_handler = Harness_handler
 module Ui_handler = Ui_handler
 module Websocket_transport = Websocket_transport
+module Mcp_stdio = Mcp_stdio
 
 let core_version = Ribosome.version
