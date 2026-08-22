@@ -11,6 +11,43 @@ type t = {
   highlights : highlight list;
 }
 
+let decode_highlight json =
+  let open Codec_decode in
+  let* start_line = field "start_line" int json in
+  let* end_line = field "end_line" int json in
+  let* tone = field "tone" Template_tone.decode json in
+  Ok { start_line; end_line; tone }
+
+let encode_highlight h =
+  Codec_encode.obj
+    [
+      ("start_line", `Int h.start_line);
+      ("end_line", `Int h.end_line);
+      ("tone", Template_tone.encode h.tone);
+    ]
+
+let decode json =
+  let open Codec_decode in
+  let* id = field "id" string json in
+  let* path = field "path" string json in
+  let* language = field "language" string json in
+  let* line_start = field "line_start" int json in
+  let* source = field "source" string json in
+  let* highlights = field "highlights" (list decode_highlight) json in
+  Ok { id; path; language; line_start; source; highlights }
+
+let encode t =
+  Codec_encode.obj
+    [
+      ("kind", `String "code");
+      ("id", `String t.id);
+      ("path", `String t.path);
+      ("language", `String t.language);
+      ("line_start", `Int t.line_start);
+      ("source", `String t.source);
+      ("highlights", `List (Stdlib.List.map encode_highlight t.highlights));
+    ]
+
 let definition : Template_definition.t =
   {
     kind = "code";

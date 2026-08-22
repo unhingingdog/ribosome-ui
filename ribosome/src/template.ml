@@ -46,3 +46,64 @@ let children = function
   | Container c -> Some c.children
   | List l -> Some l.children
   | _ -> None
+
+let rec decode json =
+  let open Codec_decode in
+  let* kind = field "kind" string json in
+  match kind with
+  | "text" ->
+      let* t = Text.decode json in
+      Ok (Text t)
+  | "image" ->
+      let* t = Image.decode json in
+      Ok (Image t)
+  | "badge" ->
+      let* t = Badge.decode json in
+      Ok (Badge t)
+  | "stat" ->
+      let* t = Stat.decode json in
+      Ok (Stat t)
+  | "divider" ->
+      let* t = Divider.decode json in
+      Ok (Divider t)
+  | "diagram" ->
+      let* t = Diagram.decode json in
+      Ok (Diagram t)
+  | "code" ->
+      let* t = Code.decode json in
+      Ok (Code t)
+  | "container" ->
+      let* t = Container.decode_child decode json in
+      Ok (Container t)
+  | "list" ->
+      let* t = List.decode decode json in
+      Ok (List t)
+  | "submittable" ->
+      let* t = Submittable.decode json in
+      Ok (Submittable t)
+  | "input" | "select" | "button" ->
+      Error
+        (Codec_error.make [ Field "kind" ] InvalidValue
+           ("kind '" ^ kind ^ "' is nested-only and cannot appear at root"))
+  | _ ->
+      Error
+        (Codec_error.make [ Field "kind" ] UnknownEnum ("unknown kind: " ^ kind))
+
+let rec encode = function
+  | Text t -> Text.encode t
+  | Image t -> Image.encode t
+  | Badge t -> Badge.encode t
+  | Stat t -> Stat.encode t
+  | Divider t -> Divider.encode t
+  | Diagram t -> Diagram.encode t
+  | Code t -> Code.encode t
+  | Container t -> Container.encode_child encode t
+  | List t -> List.encode encode t
+  | Submittable t -> Submittable.encode t
+
+let decode_string s =
+  match Yojson.Safe.from_string s with
+  | json -> decode json
+  | exception _ -> Error (Codec_error.make [] WrongType "invalid JSON string")
+
+let encode_string t = Yojson.Safe.to_string (encode t)

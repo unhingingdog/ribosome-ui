@@ -32,3 +32,7 @@ type t =
 
 val id : t -> string
 val children : t -> t list option
+val decode : Yojson.Safe.t -> (t, Codec_error.t) result
+val encode : t -> Yojson.Safe.t
+val decode_string : string -> (t, Codec_error.t) result
+val encode_string : t -> string

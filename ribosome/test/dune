@@ -21,3 +21,9 @@
  (modules primitive_codec_test)
  (libraries ribosome alcotest yojson)
  (package ribosome))
+
+(test
+ (name composite_codec_test)
+ (modules composite_codec_test)
+ (libraries ribosome alcotest yojson)
+ (package ribosome))

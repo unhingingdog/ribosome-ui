@@ -14,3 +14,16 @@ let to_string = function
   | Negative -> "Negative"
   | Warning -> "Warning"
   | Info -> "Info"
+
+let decode json =
+  Codec_decode.enum
+    [
+      ("Default", Default);
+      ("Positive", Positive);
+      ("Negative", Negative);
+      ("Warning", Warning);
+      ("Info", Info);
+    ]
+    json
+
+let encode t = `String (to_string t)

@@ -2,6 +2,22 @@ open Template_definition
 
 type 'a t = { id : string; ordered : bool option; children : 'a list }
 
+let decode decode_template json =
+  let open Codec_decode in
+  let* id = field "id" string json in
+  let* ordered = optional_field "ordered" bool json in
+  let* children = field "children" (list decode_template) json in
+  Ok { id; ordered; children }
+
+let encode encode_template t =
+  Codec_encode.obj
+    ([
+       ("kind", `String "list");
+       ("id", `String t.id);
+       ("children", `List (Stdlib.List.map encode_template t.children));
+     ]
+    @ Codec_encode.optional "ordered" t.ordered (fun b -> `Bool b) [])
+
 let definition : Template_definition.t =
   {
     kind = "list";

@@ -17,3 +17,12 @@ type t = {
   size : size;
   primitives : primitive list;
 }
+
+val decode_point : Yojson.Safe.t -> (point, Codec_error.t) result
+val encode_point : point -> Yojson.Safe.t
+val decode_size : Yojson.Safe.t -> (size, Codec_error.t) result
+val encode_size : size -> Yojson.Safe.t
+val decode_primitive : Yojson.Safe.t -> (primitive, Codec_error.t) result
+val encode_primitive : primitive -> Yojson.Safe.t
+val decode : Yojson.Safe.t -> (t, Codec_error.t) result
+val encode : t -> Yojson.Safe.t
