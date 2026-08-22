@@ -45,3 +45,9 @@
  (modules ui_runtime_test)
  (libraries ribosome_server_lib alcotest yojson)
  (package ribosome-server))
+
+(test
+ (name websocket_transport_test)
+ (modules websocket_transport_test)
+ (libraries ribosome_server_lib alcotest alcotest-lwt lwt yojson dream)
+ (package ribosome-server))

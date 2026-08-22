@@ -2,4 +2,4 @@
  (name ribosome_server_lib)
  (synopsis
   "MCP control, harness stream, and WebSocket UI transport for Ribosome")
- (libraries ribosome))
+ (libraries ribosome yojson lwt dream))

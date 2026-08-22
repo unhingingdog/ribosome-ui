@@ -12,5 +12,8 @@ module Mcp = Mcp
 module Session_registry = Session_registry
 module Harness_runtime = Harness_runtime
 module Ui_runtime = Ui_runtime
+module Harness_handler = Harness_handler
+module Ui_handler = Ui_handler
+module Websocket_transport = Websocket_transport
 
 let core_version = Ribosome.version
