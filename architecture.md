@@ -1,402 +1,201 @@
-# Ribosome UI Architecture
+# Ribosome Architecture
 
-This document describes the current Phase 2 architecture: streamed structured JSON from an inference backend becomes a rendered React UI tree, and user submissions are injected back into that tree before the next model turn.
+Ribosome is a native OCaml server that turns a coding-agent harness into a generative-UI runtime. An agent calls Ribosome through MCP to start a UI turn; the harness forwards raw assistant token deltas over a dedicated streaming channel; Ribosome feeds every delta through Telomere, decodes closable candidates into a fixed typed template ADT, reconciles them by stable ID, and broadcasts revisioned updates to any attached UI client. User submissions travel back over the UI channel as one complete semantic event, become one authoritative typed tree, and start the next agent turn through the harness adapter.
 
-Telomere is treated as a black box here: it receives incremental JSON text and returns enough completion data to parse the current partial response when possible.
+## Invariants
 
-## Module Map
+- Every generated template delta passes through Telomere. No path may batch, debounce, or bypass token-level streaming.
+- `ribosome` owns a closed OCaml template ADT. Clients do not define template kinds.
+- The core knows nothing about MCP, Dream, WebSockets, OpenCode, Codex, or rendering.
+- WebSockets are one server adapter, not the core UI abstraction.
+- MCP is the control plane, not the delta transport.
+- Submissions are complete trees, never token-streamed back to the harness.
+- The only retained TypeScript is a thin harness adapter where the host requires it.
+
+## Planes
 
 ```mermaid
 flowchart TD
-  Consumer[Consumer App]
-  Facade[JS/NPM Facade\npublic API]
-  Engine[Engine.ml\nmutable runtime + orchestration]
-  EngineTypes[EngineTypes.ml\nconfig, request/history/handle types]
-  State[State.ml\npure typed phase machine]
-  Prompt[Prompt.ml\nprompt generator]
-  Http[Http.ml\nfetch POST helper]
-  Stream[Stream.ml\nSSE parser + stream pump]
-  Backend[EngineBackend.ml\nTelomere_result wrapper]
-  Telomere[Telomere\nblack-box partial JSON closer]
-  Parser[Parser.ml\nJSON -> template tree]
-  Reconciler[Reconciler.ml\nid-based subtree patching]
-  Types[Types.ml\ntemplate model]
-  SubmitTypes[SubmitTypes.ml\nuser submission model]
-  Frontend[EngineFrontendReact.ml\ntemplate -> React element]
-  React[React Root]
+  Harness[Agent Harness\nOpenCode / Codex / Pi]
+  Adapter[Harness Adapter]
+  Mcp[MCP Control\nribosome-server]
+  Stream[Harness Stream\nribosome-server]
+  Core[ribosome core\nTelomere + ADT + reconcile]
+  Ui[UI Transport\nribosome-server]
+  Client[UI Client\nTUI / Web / Native]
 
-  Consumer --> Facade
-  Facade --> Engine
-  Engine --> EngineTypes
-  Engine --> State
-  Engine --> Prompt
-  Engine --> Http
-  Http --> Stream
-  Stream --> Engine
-  Engine --> Backend
-  Backend --> Telomere
-  Backend --> Parser
-  Parser --> Types
-  Engine --> Reconciler
-  Reconciler --> Types
-  Engine --> SubmitTypes
-  Engine --> Frontend
-  Frontend --> Types
-  Frontend --> SubmitTypes
-  Frontend --> React
-  Frontend --> Engine
+  Harness -->|MCP initialize / tools/call start| Mcp
+  Mcp -->|session, skill bundle, nonce| Adapter
+  Harness -->|assistant token deltas| Adapter
+  Adapter -->|generation delta| Stream
+  Stream --> Core
+  Core -->|revisioned template update| Ui
+  Ui -->|template update| Client
+  Client -->|complete semantic event| Ui
+  Ui -->|user turn| Adapter
+  Adapter -->|new harness turn| Harness
 ```
 
-## Runtime Data Flow
+### MCP control plane
 
-```mermaid
-sequenceDiagram
-  participant App as Consumer App
-  participant Facade as JS Facade
-  participant Engine as Engine.ml
-  participant State as State.ml
-  participant Prompt as Prompt.ml
-  participant Http as Http.ml
-  participant Stream as Stream.ml
-  participant Backend as EngineBackend.ml
-  participant Telomere as Telomere
-  participant Parser as Parser.ml
-  participant Reconciler as Reconciler.ml
-  participant Frontend as EngineFrontendReact.ml
-  participant React as React Root
+The harness calls Ribosome as an MCP server over stdio. Ribosome implements a minimal tested subset: `initialize`, `notifications/initialized`, `ping`, `tools/list`, and one tool `start`. The `start` tool accepts a mode (default `ui`), plus adapter-injected harness session ID and a channel nonce. Its result returns session metadata as structured content and the selected skill body as model-visible content, ending with instructions that the next assistant response must be raw template JSON only. MCP is not used to transport deltas; standard `tools/call` delivers only complete arguments.
 
-  App->>Facade: create(config, root)
-  Facade->>Engine: create config
-  Engine->>Engine: create_runtime config with empty root template
-  App->>Facade: start()
-  Facade->>Engine: start handle
-  Engine->>Prompt: create_llm_prompt templates assets goal None
-  Engine->>State: kick_off any_state prompt
-  State-->>Engine: Ok Sending
-  Engine->>Engine: append current user message to internal history
-  Engine->>Engine: build request context with full user message history
-  Engine->>Http: post requestConfig callbacks
-  Http->>Stream: pump response.body reader
+### Harness stream plane
 
-  loop SSE data frames
-    Stream-->>Engine: on_chunk(raw provider payload)
-    Engine->>Engine: config.stream_adapter payload
-    Engine->>State: receive_chunk any_state delta
-    Engine->>Backend: handle_chunk delta processor
-    Backend->>Telomere: feed partial JSON
-    Telomere-->>Backend: Pending / Completion / Corrupted
-    alt JSON closable
-      Backend->>Parser: parse completed JSON
-      Parser-->>Backend: template tree
-      Backend-->>Engine: Parsed(template, processor)
-      Engine->>Reconciler: reconcile last_template template by id
-      Reconciler-->>Engine: updated current UI tree
-      Engine->>Engine: store reconciled last_template
-      Engine->>Frontend: render_template_with_submit reconciled on_submit
-      Frontend->>React: render element tree
-    else JSON pending
-      Backend-->>Engine: Pending(processor)
-      Engine->>Engine: store processor only
-    else corrupted or hard parse failure
-      Backend-->>Engine: Failed(message, processor)
-      Engine->>State: fail any_state message
-      Engine->>App: on_error(message)
-    end
-  end
+After kickoff, the harness adapter opens a WebSocket to `/v1/harness` and authenticates with the nonce injected at `start`. It forwards every native assistant delta as one harness delta message carrying generation ID and a monotonically increasing sequence number. Terminal generation events become `completed` or `failed`. The server sends `userTurn` messages back to the adapter, each containing the full authoritative typed tree plus the semantic event; the adapter starts the next harness turn through the host's native session API. The harness protocol transports raw deltas without knowing OpenCode, Codex, or Pi types.
 
-  Http-->>Engine: on_done(Complete)
-  Engine->>State: complete any_state
-  State-->>Engine: Ok Idle
-  Engine->>App: on_message_complete(last_template)
-```
-
-## Structured Submit Loop
-
-```mermaid
-sequenceDiagram
-  participant React as Rendered Submittable Component
-  participant Frontend as EngineFrontendReact.ml
-  participant Engine as Engine.ml
-  participant SubmitTypes as SubmitTypes.ml
-  participant App as Consumer App
-  participant Prompt as Prompt.ml
-  participant Http as HTTP Stream
-
-  React->>Frontend: on_submit(submission_payload)
-  Frontend->>Engine: SubmitTypes.submission_payload
-  Engine->>App: callbacks.on_submit(payload)
-  Engine->>SubmitTypes: inject_user_input last_template payload.values
-  SubmitTypes-->>Engine: current UI tree with submitted values
-  Engine->>SubmitTypes: serialise_template tree
-  Engine->>Prompt: create_llm_prompt templates assets goal None
-  Note over Engine,Prompt: every turn repeats schema and output contract;\nthe user message is the current UI tree JSON
-  Engine->>Http: start next streamed request
-```
-
-The submission payload is user-authored runtime data at the frontend boundary. Before the next model turn, the engine injects those values into the current assistant-authored template tree and serializes that tree as the next user message.
-
-The consumer app does not call submit directly. `EngineFrontendReact` injects an internal submit callback into rendered submittable components, and that callback starts the next model turn inside the library.
-
-```mermaid
-classDiagram
-  class submittable {
-    string kind
-    string id
-    input[] value
-  }
-
-  class submission_payload {
-    string template_id
-    submitted_input[] values
-  }
-
-  class submitted_input {
-    string id
-    submitted_value value
-  }
-
-  submittable : assistant-authored template
-  submission_payload : user-authored runtime response
-  submission_payload --> submitted_input
-```
-
-## Engine Runtime Store
-
-`Engine.ml` is the effect boundary. It owns the mutable runtime state and interprets pure state transitions.
-
-```mermaid
-classDiagram
-  class Engine_t {
-    config
-    renderer option
-    mutable State.any_state state
-    mutable chat_message[] history
-    mutable Processor.processor_state processor
-    mutable template option last_template
-    mutable string option last_error
-    mutable abort_callback option abort
-  }
-
-  class State_any_state {
-    existential typed state
-  }
-
-  class State_ml {
-    transition_idle()
-    transition_sending()
-    transition_receiving()
-    transition_errored()
-  }
-
-  Engine_t --> State_any_state
-  Engine_t --> State_ml : calls widening helpers
-```
-
-The state machine does not know about HTTP, React, Telomere, prompts, or providers. It only models the logical phase:
-
-```mermaid
-stateDiagram-v2
-  [*] --> Idle
-  Idle --> Sending: Send
-  Sending --> Receiving: StartRecv
-  Sending --> Errored: ErrOut
-  Receiving --> Receiving: Continue
-  Receiving --> Idle: Complete
-  Receiving --> Errored: ErrOut
-  Errored --> Sending: Retry FailedSend
-  Errored --> Receiving: Retry FailedRecv
-  Errored --> Idle: Restart
-```
-
-`State.ml` keeps typed GADT transitions internally. Because `Engine.ml` is a mutable async runtime, it stores `State.any_state`; phase widening is kept behind small state helpers such as `kick_off`, `receive_chunk`, `complete`, and `fail` rather than duplicated in the engine.
-
-`Engine.ml` starts with a synthetic empty root template:
-
-```json
-{ "kind": "container", "id": "root", "children": [] }
-```
-
-Every parsed model response is treated as a patch against the current tree. If the patch root `id` matches an existing node, `Reconciler.ml` replaces that node and preserves the rest of the tree. If no matching `id` is found, the engine replaces the whole root with the parsed template.
-
-`Engine.ml` keeps a simple internal history of user messages, and the current request context sends the full user message history. Assistant raw stream buffers are not appended to history. The prompt tells the model that the user message contains the current UI tree as JSON, including user input values from the previous interaction.
-
-`Engine.ml` also stores an abort callback for the current fetch. `reset` aborts in-flight work. Each accepted turn resets turn-local processor and error state before installing the next request's abort handle.
-
-## Provider And HTTP Boundaries
-
-`Http.ml` contains the JavaScript async boundary. It starts `fetch`, pumps the stream, catches promise failures internally, and reports outcomes through callbacks rather than exposing promise rejection through the engine API.
-The engine passes an `AbortSignal` for each request so reset can cancel in-flight work without reporting a user-visible error.
-
-```ocaml
-type completion_reason =
-  | Complete
-  | Failed of string
-```
-
-`Stream.ml` parses SSE framing and pumps raw `data:` payloads. Provider-specific response shapes are abstracted by:
-
-```ocaml
-type stream_adapter = string -> (string option, string) result
-```
-
-The engine sees only extracted text deltas. Provider details such as OpenAI-shaped JSON or sentinel payloads belong in adapter modules, not in `Engine.ml`.
-
-## Public Package Boundary
-
-The npm package exposes a small JS/TS facade that wraps the Melange-generated OCaml internals.
+### Core pipeline
 
 ```mermaid
 flowchart LR
-  App[TypeScript Consumer]
-  PublicAPI[Public JS/TS Facade]
-  Internal[Melange-generated OCaml Internals]
-  Engine[Engine.t]
-
-  App --> PublicAPI
-  PublicAPI --> Internal
-  Internal --> Engine
-
-  PublicAPI -.hides.-> Variants[OCaml variants, lists, ADTs]
+  Delta[Harness delta] --> Telomere
+  Telomere -->|Completion suffix| Decode
+  Decode -->|typed template| Validate
+  Validate --> Reconcile
+  Reconcile -->|revisioned tree| Session
+  Session -->|template update| UI
 ```
 
-Target public shape:
+Every delta feeds `Telomere.Processor.feed`. On `Completion suffix`, Ribosome decodes `buffer ^ suffix` into the typed ADT, validates invariants, and reconciles against the committed tree by stable ID. Valid commits increment the session revision and emit a template update. Decode, validation, and reconciliation failures do not mutate committed state while generation continues. Corrupted processors permanently stop candidate commits.
 
-```ts
-type RibosomeEngine = {
-  start(): void;
-  reset(): void;
-  history(): ChatMessage[];
-};
+### UI plane
+
+UI clients attach over WebSocket to `/v1/ui` with their session nonce. On attach they receive the current `sessionState` snapshot. Each committed revision broadcasts a `templateUpdate`. Clients send `componentEvent` messages (`click`, `change`, `submit`) carrying event ID and base revision. `change` events apply locally and broadcast immediately; `click` and `submit` events produce one `userTurn` for the harness adapter. Stale revisions and duplicate event IDs are rejected. Reconnect from a known revision resends the snapshot.
+
+## Packages
+
+```mermaid
+flowchart LR
+  Telomere[telomere]
+  Ribosome[ribosome]
+  Server[ribosome-server]
+  Adapter[adapters/opencode]
+
+  Ribosome --> Telomere
+  Server --> Ribosome
+  Adapter -.WebSocket.-> Server
+  Adapter -.MCP stdio.-> Server
 ```
 
-Creating the engine prepares the runtime and renderer. The consumer starts the initial UI turn by calling `start()`. User interaction proceeds through rendered UI submit callbacks owned by the library. The current external lifecycle controls are start, reset, and history inspection.
+| Package | Responsibility | Dependencies |
+|---|---|---|
+| `telomere` | Incremental JSON completion | OCaml stdlib |
+| `ribosome` | Typed template ADT, codec, validation, reconciliation, session state, modes | `telomere`, `yojson` |
+| `ribosome-server` | MCP subset, harness and UI protocols, Dream WebSocket transport, session registry, runtime | `ribosome`, `yojson`, `lwt`, `dream`, `cmdliner` |
+| `adapters/opencode` | Thin TypeScript harness adapter | `@opencode-ai/plugin`, Bun |
 
-The facade should convert between JS-native objects and internal Melange values so consumers never construct OCaml ADTs or lists directly.
+Test dependencies: `alcotest`, `alcotest-lwt`, `qcheck-core`, `qcheck-alcotest`.
 
-## Phase 2 Completion Status
+## Target Layout
 
-Phase 2 is complete. All architecture components have been implemented, tested, and integrated.
+```text
+dune-project
+dune
+telomere/        src/ test/
+ribosome/        src/template/ src/codec/ test/
+ribosome-server/ src/ bin/ test/
+adapters/opencode/
+skills/ribosome/SKILL.md
+protocol-fixtures/
+architecture.md
+plan.md
+README.md
+```
 
-Completed milestones:
+## Template Model
 
-- Engine public/internal config defined
-- `Engine.t` runtime store created
-- State widening helpers implemented
-- Explicit start flow implemented
-- Stream chunks pumped into backend
-- Parsed templates rendered
-- Template patches reconciled by id
-- Submittable `on_submit` wired
-- Submitted values injected into current tree
-- Next streamed turn started automatically
-- Integration tests added
-- npm-facing facade built
-- Demo app at prototype parity
+Ribosome ships a closed ADT. The initial primitive set matches the `ratatui-port` reference:
 
-## Telomere Internals And Interface
+- `text` (Paragraph, H1-H6) with `value`
+- `image` (`src`, `alt`)
+- `badge` (`label`, `variant`)
+- `stat` (`label`, `value`, optional `secondary`)
+- `divider` (optional `label`)
+- `diagram` (`title`, `size`, typed primitives: text, line, arrow, rectangle, circle, polyline with tones)
+- `code` (`path`, `language`, `line_start`, `source`, typed highlights with tones)
+- `container` (`direction`: Vertical | Horizontal, `children`)
+- `list` (optional `ordered`, `children`)
+- `submittable` (`value` of input/select fields, optional `button`)
+- `input` (string or int `value`)
+- `select` (`label`, `options`, optional `selected`)
+- `button` (`label`, `action`: Submit | Navigate | Custom)
 
-Telomere is the incremental JSON completion layer used between streamed text deltas and template parsing. It does not know about Ribosome templates, React, providers, HTTP, prompts, or conversation history. Its job is to answer: given the text streamed so far, can this prefix be closed into valid JSON now?
+There is no public `Broken` variant; decode failures are errors while generation continues. Nested-only kinds (`input`, `select`, `button`) are rejected at the root.
 
-### Public Processor Interface
-
-The engine-facing interface is `Telomere.Processor`:
+## Session State
 
 ```ocaml
-type processor_state = {
-  balancer : Balancer.balancer_state;
-  buffer : string;
+type session = {
+  id: string;
+  mode: Mode.t;
+  tree: Template.t option;
+  revision: int;
+  generation: generation option;
+  stream: Incremental.state;
+  ui_connections: connection list;
+  harness_connection: connection option;
+  recent_event_ids: string list;
 }
+```
 
-type output =
-  | Pending
-  | Completion of string
-  | Corrupted
+Generation IDs are opaque strings. Deltas carry monotonically increasing sequence numbers. Telomere state resets at generation start while preserving the committed tree. Event IDs are deduplicated within a bounded window. The core session type contains no Codex, OpenCode, Dream, or WebSocket types.
+
+## Submission Flow
+
+```mermaid
+sequenceDiagram
+  participant UI as UI Client
+  participant Server as ribosome-server
+  participant Adapter as Harness Adapter
+  participant Harness as Agent Harness
+
+  UI->>Server: componentEvent (submit, baseRevision, values)
+  Server->>Server: reduce event against tree
+  Server->>Server: produce authoritative typed tree
+  Server->>Adapter: userTurn (full tree, semantic event)
+  Adapter->>Harness: new turn with tree + event
+  Harness-->>Adapter: assistant token deltas
+  Adapter->>Server: generation delta (per token)
+  Server->>UI: templateUpdate (per revision)
+```
+
+No user input is token-streamed back. The complete tree is submitted at once, the adapter serializes it once, and the harness sees one new user turn.
+
+## Modes And Skills
+
+A mode is a named bundle of skill references. The initial overhaul ships only the `ui` mode, which returns the canonical `skills/ribosome/SKILL.md`. The skill is updated for container direction, code, and diagram primitives, and states that the next assistant response must be raw template JSON only. The mode registry supports adding `code`, `explore`, and other modes later without core changes. The skill is checked against the canonical template registry so every advertised kind exists in the ADT.
+
+## Harness Adapters
+
+Each harness needs a thin adapter that:
+
+- Correlates the Ribosome MCP `start` call with the native harness session.
+- Captures assistant token deltas from the host's streaming events.
+- Forwards one harness delta per native delta without batching.
+- Maps host completion/error events to harness `completed`/`failed`.
+- Decodes server `userTurn` messages and starts the next native turn.
+- Carries sequence numbers and generation IDs.
+
+OpenCode exposes `message.part.delta` events; Pi exposes `message_update` with `assistantMessageEvent.text_delta`; Codex App Server exposes `item/agentMessage/delta`. The first complete vertical slice targets OpenCode. The adapter is the only required TypeScript package.
+
+## Telomere
+
+Telomere is the incremental JSON completion layer. It receives streamed text and answers: given the prefix so far, can this be closed into valid JSON now? It is mandatory in the streaming path and is Ribosome's competitive advantage over other generative-UI frameworks.
+
+```ocaml
+type processor_state
+type output = Pending | Completion of string | Corrupted
 
 val create_processor : unit -> processor_state
-
 val feed : processor_state -> string -> output * processor_state
 ```
 
-`processor_state.buffer` is the raw accumulated model output for the current turn. The engine uses it only while processing that stream; successful assistant buffers are not stored as history.
+`Pending` means the stream is mid-token. `Completion suffix` means `buffer ^ suffix` is valid JSON ready to decode. `Corrupted` permanently stops candidate commits for that processor. State is immutable; callers thread the returned state forward.
 
-`feed` appends the incoming chunk to `buffer`, passes the chunk through the balancer, and returns a fresh processor state. Telomere state is immutable from the caller's perspective; callers must store the returned state.
+## Future Work
 
-### Output Semantics
-
-`Pending` means the current stream cannot yet be cleanly closed into JSON. The engine should store the returned processor state and wait for more chunks.
-
-`Completion suffix` means the current buffer can be made valid JSON by appending `suffix`. `EngineBackend.handle_chunk` parses `processor_state.buffer ^ suffix` into a Ribosome template. A healthy parsed template can be reconciled and rendered immediately.
-
-`Corrupted` means the stream encountered an invalid JSON transition or mismatched closer. The engine treats this as a hard stream failure.
-
-### Balancer State
-
-`Balancer.balancer_state` tracks enough lexer/parser state to compute a completion suffix:
-
-```ocaml
-type balancer_state = {
-  closing_stack : closing_token list;
-  json_state : json_state;
-  is_corrupted : bool;
-}
-```
-
-`closing_stack` stores the closers needed to finish currently open structures. Opening `{`, `[`, object keys, and string values push corresponding closing tokens. Matching close tokens pop them. A mismatched close corrupts the state.
-
-`json_state` tracks where the parser is within JSON syntax: object, array, key, value, string, number/literal prefix, nested value completion, or pending top-level state.
-
-`is_corrupted` poisons the balancer after a hard error. Once corrupted, future chunks keep returning `Corrupted` rather than attempting recovery inside the same processor.
-
-### Clean Closability
-
-Telomere only emits a `Completion` when the current `json_state` is cleanly closable. Examples include:
-
-- before any input or after a full document has closed
-- an empty object or array
-- a closed string value
-- a complete number/literal prefix
-- a fully closed nested object or array value
-
-If the current state is inside an open string, partial key, incomplete literal, or otherwise syntactically unfinished position, the result is `Pending`.
-
-When cleanly closable, Telomere converts `closing_stack` into a suffix by reversing the stack and mapping each closing token to its character:
-
-```ocaml
-CloseBrace -> '}'
-CloseBracket -> ']'
-CloseKey -> '"'
-CloseStringData -> '"'
-```
-
-### Error Semantics
-
-Telomere distinguishes soft not-yet-closable states from hard corruption.
-
-`NotClosable` is a soft result. It means the current prefix may become valid after more input, so `Processor.feed` returns `Pending`.
-
-Hard lexer/parser errors and stack corruption mark the balancer corrupted. `Processor.feed` returns `Corrupted`, and `EngineBackend.handle_chunk` maps that to `Telomere_result.Failed`.
-
-### EngineBackend Wrapper
-
-`EngineBackend.ml` wraps Telomere for Ribosome-specific use:
-
-```ocaml
-module Telomere_result : sig
-  type t =
-    | Pending of Processor.processor_state
-    | Parsed of Types.template * Processor.processor_state
-    | Failed of string * Processor.processor_state
-end
-
-val handle_chunk : string -> Processor.processor_state -> Telomere_result.t
-```
-
-This wrapper is where Telomere output becomes a Ribosome template result:
-
-- `Pending` stays pending.
-- `Completion suffix` is parsed as `processor_state.buffer ^ suffix`.
-- parser success becomes `Parsed` when the parsed tree is healthy.
-- soft broken template nodes are treated as `Pending`, because later bytes may turn the partial tree into a valid specialized template.
-- hard broken template nodes, hard parser failure, or Telomere corruption become `Failed`.
-
-This keeps Telomere generic while allowing the engine to work in terms of rendered templates.
+- Additional modes (`code`, `explore`) with distinct skill bundles.
+- Broader MCP operations beyond `start`.
+- Additional harness adapters (Codex, Pi).
+- Native, web, and TUI UI clients built against the versioned UI protocol.
+- Optional streaming submission for large trees if a future harness supports it.

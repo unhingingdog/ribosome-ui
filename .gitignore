@@ -9,7 +9,6 @@ js/demo/dist/
 js/node_modules/
 
 # agent files
-plan.md
 plan-steps.md
 all_ml.txt
 
