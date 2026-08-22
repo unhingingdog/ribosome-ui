@@ -45,3 +45,9 @@
  (modules template_event_test)
  (libraries ribosome alcotest)
  (package ribosome))
+
+(test
+ (name incremental_test)
+ (modules incremental_test)
+ (libraries ribosome alcotest)
+ (package ribosome))
