@@ -1,4 +1,4 @@
-open LexerTypes
+open Lexer_types
 
 type balancing_error = NotClosable | Corrupted
 

@@ -1,5 +1,5 @@
-open LexerTypes
-open LexerNonStringCheck
+open Lexer_types
+open Lexer_non_string_check
 
 (* Mirrors non_string_data.rs *)
 

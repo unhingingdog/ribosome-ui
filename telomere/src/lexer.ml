@@ -1,12 +1,12 @@
-open LexerTypes
-open LexerEscape
-open LexerBrace
-open LexerBracket
-open LexerColon
-open LexerComma
-open LexerQuote
-open LexerStringData
-open LexerNonStringData
+open Lexer_types
+open Lexer_escape
+open Lexer_brace
+open Lexer_bracket
+open Lexer_colon
+open Lexer_comma
+open Lexer_quote
+open Lexer_string_data
+open Lexer_non_string_data
 
 (* Mirrors dispatcher.rs — priority-ordered routing to sub-parsers.
    Pure function: takes a char and current state, returns (token * new_state) or error. *)

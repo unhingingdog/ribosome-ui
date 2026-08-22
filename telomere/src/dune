@@ -1,4 +1,18 @@
 (library
  (name telomere)
  (public_name telomere)
- (synopsis "Incremental JSON completion for streamed LLM output"))
+ (synopsis "Incremental JSON completion for streamed LLM output")
+ (private_modules
+  balancer
+  balancer_types
+  lexer
+  lexer_brace
+  lexer_bracket
+  lexer_colon
+  lexer_comma
+  lexer_escape
+  lexer_non_string_check
+  lexer_non_string_data
+  lexer_quote
+  lexer_string_data
+  lexer_types))

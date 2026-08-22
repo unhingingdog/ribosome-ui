@@ -1,4 +1,4 @@
-open LexerTypes
+open Lexer_types
 
 (* Mirrors is_valid_non_string_data.rs *)
 

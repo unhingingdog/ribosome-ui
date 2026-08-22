@@ -1,5 +1,5 @@
-open LexerTypes
-open BalancerTypes
+open Lexer_types
+open Balancer_types
 
 type balancer_state = {
   closing_stack : closing_token list;

@@ -1,4 +1,4 @@
-open LexerTypes
+open Lexer_types
 
 (* Mirrors brace.rs *)
 

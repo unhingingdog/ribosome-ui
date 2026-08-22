@@ -1,4 +1,4 @@
-open LexerTypes
+open Lexer_types
 
 (* Mirrors string_data.rs *)
 
