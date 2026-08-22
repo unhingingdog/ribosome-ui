@@ -386,14 +386,14 @@ This document breaks the `rebuild/native` branch into features, commits, and sub
 
 ### Task 6.1: Scaffold the harness adapter
 
-1. Add `adapters/opencode/package.json` without React, Vite, or Vitest.
-2. Add TypeScript configuration and Bun test scripts.
+1. Add `adapters/opencode/package.json` without React.
+2. Add TypeScript configuration and vitest test scripts.
 3. Add an adapter configuration type for server URL and MCP tool name.
 4. Add a WebSocket connection manager with reconnect and shutdown.
 5. Keep session state in a map keyed by OpenCode session ID.
 6. Add unit tests using fake WebSocket and plugin contexts.
 
-**Acceptance**: `bun test` and `tsc --noEmit` pass independently.
+**Acceptance**: `vitest run` and `tsc --noEmit` pass independently.
 
 ### Task 6.2: Correlate MCP kickoff with harness sessions
 
@@ -549,8 +549,8 @@ This document breaks the `rebuild/native` branch into features, commits, and sub
 1. Add CI installation for the supported OCaml compiler.
 2. Run `dune build @all`, `dune runtest`, and `dune fmt --check`.
 3. Run opam lint for all three packages.
-4. Run Bun install, TypeScript checking, and adapter tests.
-5. Cache opam and Bun dependencies.
+4. Run npm install, TypeScript checking, and adapter tests.
+5. Cache opam and npm dependencies.
 6. Keep randomized property-test seeds visible in failures.
 
 **Acceptance**: CI covers native core, server, protocol fixtures, and adapter.
@@ -583,8 +583,8 @@ git diff --check
 After every OpenCode adapter task:
 
 ```bash
-bun test
-bun run typecheck
+vitest run
+npx tsc --noEmit
 git diff --check
 ```
 

@@ -82,7 +82,7 @@ flowchart LR
 | `telomere` | Incremental JSON completion | OCaml stdlib |
 | `ribosome` | Typed template ADT, codec, validation, reconciliation, session state, modes | `telomere`, `yojson` |
 | `ribosome-server` | MCP subset, harness and UI protocols, Dream WebSocket transport, session registry, runtime | `ribosome`, `yojson`, `lwt`, `dream`, `cmdliner` |
-| `adapters/opencode` | Thin TypeScript harness adapter | `@opencode-ai/plugin`, Bun |
+| `adapters/opencode` | Thin TypeScript harness adapter | `@opencode-ai/plugin`, vitest |
 
 Test dependencies: `alcotest`, `alcotest-lwt`, `qcheck-core`, `qcheck-alcotest`.
 
