@@ -33,3 +33,9 @@
  (modules session_registry_test)
  (libraries ribosome_server_lib alcotest)
  (package ribosome-server))
+
+(test
+ (name harness_runtime_test)
+ (modules harness_runtime_test)
+ (libraries ribosome_server_lib alcotest yojson)
+ (package ribosome-server))

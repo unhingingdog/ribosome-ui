@@ -10,5 +10,6 @@ module Harness_protocol = Harness_protocol
 module Jsonrpc = Jsonrpc
 module Mcp = Mcp
 module Session_registry = Session_registry
+module Harness_runtime = Harness_runtime
 
 let core_version = Ribosome.version
