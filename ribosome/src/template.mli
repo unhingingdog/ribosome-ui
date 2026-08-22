@@ -25,19 +25,5 @@ type t =
   | List of t Template_list.t
   | Submittable of Template_submittable.t
 
-let id = function
-  | Text t -> t.id
-  | Image t -> t.id
-  | Badge t -> t.id
-  | Stat t -> t.id
-  | Divider t -> t.id
-  | Diagram t -> t.id
-  | Code t -> t.id
-  | Container t -> t.id
-  | List t -> t.id
-  | Submittable t -> t.id
-
-let children = function
-  | Container c -> Some c.children
-  | List l -> Some l.children
-  | _ -> None
+val id : t -> string
+val children : t -> t list option
