@@ -1,7 +1,5 @@
 open Lexer_types
 
-(* Mirrors colon.rs *)
-
 let parse_colon (state : json_state) :
     (token * json_state, json_parse_error) result =
   match state with

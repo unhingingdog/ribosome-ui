@@ -1,8 +1,6 @@
 open Lexer_types
 open Lexer_non_string_check
 
-(* Mirrors non_string_data.rs *)
-
 let is_non_string_start (c : char) : bool =
   (c >= '0' && c <= '9') || c = '-' || c = 'n' || c = 't' || c = 'f'
 

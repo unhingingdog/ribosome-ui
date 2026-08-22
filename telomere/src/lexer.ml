@@ -8,7 +8,7 @@ open Lexer_quote
 open Lexer_string_data
 open Lexer_non_string_data
 
-(* Mirrors dispatcher.rs — priority-ordered routing to sub-parsers.
+(* Priority-ordered routing to sub-parsers.
    Pure function: takes a char and current state, returns (token * new_state) or error. *)
 
 let is_escaped (state : json_state) : bool =

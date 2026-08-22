@@ -1,7 +1,5 @@
 open Lexer_types
 
-(* Mirrors escape.rs *)
-
 (* Called on '\': transitions String(Open) -> String(Escaped) *)
 let handle_escape (state : json_state) :
     (token * json_state, json_parse_error) result =

@@ -1,7 +1,5 @@
 open Lexer_types
 
-(* Mirrors string_data.rs *)
-
 (* Guard: true when currently inside an open or escaped string *)
 let is_string_data (state : json_state) : bool =
   match state with

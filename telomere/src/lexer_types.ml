@@ -73,8 +73,7 @@ type json_state =
 (* Shared helper used by all sub-parsers: return the current state unchanged *)
 let ok_unchanged state token = Ok (token, state)
 
-(* Whether the current state can be cleanly terminated without more input.
-   Mirrors JSONState::is_cleanly_closable() from state_types.rs. *)
+(* Whether the current state can be cleanly terminated without more input. *)
 let is_cleanly_closable = function
   | Pending -> true
   | Brace Empty -> true

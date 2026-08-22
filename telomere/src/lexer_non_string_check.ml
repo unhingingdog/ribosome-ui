@@ -1,7 +1,5 @@
 open Lexer_types
 
-(* Mirrors is_valid_non_string_data.rs *)
-
 type completion_check = Complete | Incomplete
 
 let literals = [ "true"; "false"; "null" ]

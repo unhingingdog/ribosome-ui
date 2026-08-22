@@ -1,7 +1,5 @@
 open Lexer_types
 
-(* Mirrors bracket.rs *)
-
 let parse_bracket (kind : recursive_structure_type) (state : json_state) :
     (token * json_state, json_parse_error) result =
   match kind with

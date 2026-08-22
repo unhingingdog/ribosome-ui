@@ -131,6 +131,15 @@ let stack_depth_tests =
     completion_case
       ("4 levels deeply nested", "{\"a\":{\"b\":{\"c\":{\"d\":1", "}}}}");
     completion_case ("open string value nested", "{\"a\":{\"b\":\"hel", "\"}}");
+    (* Regression: four-level mixed nesting (obj-arr-obj-arr) *)
+    completion_case
+      ("4 levels mixed obj-arr-obj-arr", "{\"a\":[{\"b\":[1", "]}]}");
+    (* Regression: four-level mixed nesting (arr-obj-arr-obj) *)
+    completion_case
+      ("4 levels mixed arr-obj-arr-obj", "[{\"a\":[{\"b\":1", "}]}]");
+    (* Regression: deeper mixed nesting with partial value *)
+    completion_case
+      ("5 levels mixed nesting", "[{\"a\":{\"b\":[{\"c\":1", "}]}}]");
   ]
 
 (* --- Streaming across chunk boundaries --- *)

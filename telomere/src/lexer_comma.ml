@@ -1,7 +1,5 @@
 open Lexer_types
 
-(* Mirrors comma.rs *)
-
 let parse_comma (state : json_state) :
     (token * json_state, json_parse_error) result =
   match state with
