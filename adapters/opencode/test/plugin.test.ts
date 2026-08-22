@@ -363,4 +363,141 @@ describe("plugin hooks — kickoff correlation", () => {
     expect(failed.generation_id).toBe("msg-1");
     expect(failed.reason).toContain("timeout");
   });
+
+  it("injects user_turn as complete submission via promptAsync", async () => {
+    const { ctx, fake } = makeCtx();
+    const hooks = createHooks(ctx);
+
+    const promptCalls: Array<{ id: string; text: string }> = [];
+    ctx.promptClient = {
+      promptAsync: vi.fn(async (body: any) => {
+        promptCalls.push({
+          id: body.path.id,
+          text: body.body.parts[0].text,
+        });
+        return {};
+      }),
+    };
+
+    await hooks["tool.execute.before"]!(
+      { tool: "start", sessionID: "oc-1", callID: "call-1" },
+      { args: {} },
+    );
+    await hooks["tool.execute.after"]!(
+      { tool: "start", sessionID: "oc-1", callID: "call-1", args: {} },
+      {
+        title: "",
+        output: JSON.stringify({ session_id: "rs-1", ui_nonce: "u1" }),
+        metadata: {},
+      },
+    );
+    fake.fireOpen();
+
+    const userTurn = JSON.stringify({
+      kind: "user_turn",
+      session_id: "rs-1",
+      tree: '{"type":"column"}',
+      event: '{"type":"submit","target":"form1"}',
+    });
+    fake.onmessage!({ data: userTurn } as MessageEvent);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(promptCalls.length).toBe(1);
+    expect(promptCalls[0].id).toBe("oc-1");
+    expect(promptCalls[0].text).toContain("[ribosome-tree]");
+    expect(promptCalls[0].text).toContain("[ribosome-event]");
+  });
+
+  it("queues at most one submission while busy, flushes on idle", async () => {
+    const { ctx, fake } = makeCtx();
+    const hooks = createHooks(ctx);
+
+    const promptCalls: Array<{ id: string; text: string }> = [];
+    ctx.promptClient = {
+      promptAsync: vi.fn(async (body: any) => {
+        promptCalls.push({
+          id: body.path.id,
+          text: body.body.parts[0].text,
+        });
+        return {};
+      }),
+    };
+
+    await hooks["tool.execute.before"]!(
+      { tool: "start", sessionID: "oc-1", callID: "call-1" },
+      { args: {} },
+    );
+    await hooks["tool.execute.after"]!(
+      { tool: "start", sessionID: "oc-1", callID: "call-1", args: {} },
+      {
+        title: "",
+        output: JSON.stringify({ session_id: "rs-1", ui_nonce: "u1" }),
+        metadata: {},
+      },
+    );
+    fake.fireOpen();
+
+    const userTurn = JSON.stringify({
+      kind: "user_turn",
+      session_id: "rs-1",
+      tree: '{"type":"column"}',
+      event: '{"type":"submit","target":"form1"}',
+    });
+    fake.onmessage!({ data: userTurn } as MessageEvent);
+    await new Promise((r) => setTimeout(r, 0));
+    fake.onmessage!({ data: userTurn } as MessageEvent);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(promptCalls.length).toBe(1);
+    expect(ctx.submission.queuedCount).toBe(1);
+
+    await hooks.event!({
+      event: { type: "session.idle", properties: { sessionID: "oc-1" } } as any,
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(promptCalls.length).toBe(2);
+    expect(ctx.submission.queuedCount).toBe(0);
+  });
+
+  it("rejects user_turn for unknown sessions", async () => {
+    const { ctx, fake } = makeCtx();
+    const hooks = createHooks(ctx);
+
+    const promptCalls: Array<{ id: string; text: string }> = [];
+    ctx.promptClient = {
+      promptAsync: vi.fn(async (body: any) => {
+        promptCalls.push({
+          id: body.path.id,
+          text: body.body.parts[0].text,
+        });
+        return {};
+      }),
+    };
+
+    await hooks["tool.execute.before"]!(
+      { tool: "start", sessionID: "oc-1", callID: "call-1" },
+      { args: {} },
+    );
+    await hooks["tool.execute.after"]!(
+      { tool: "start", sessionID: "oc-1", callID: "call-1", args: {} },
+      {
+        title: "",
+        output: JSON.stringify({ session_id: "rs-1", ui_nonce: "u1" }),
+        metadata: {},
+      },
+    );
+    fake.fireOpen();
+
+    const userTurn = JSON.stringify({
+      kind: "user_turn",
+      session_id: "rs-unknown",
+      tree: '{"type":"column"}',
+      event: '{"type":"submit"}',
+    });
+    fake.onmessage!({ data: userTurn } as MessageEvent);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(promptCalls.length).toBe(0);
+  });
 });

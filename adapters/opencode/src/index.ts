@@ -35,6 +35,14 @@ export {
   type GenerationMap,
 } from "./delta.js";
 export {
+  createSubmissionInjector,
+  formatSubmission,
+  type SubmissionInjector,
+  type SubmissionPayload,
+  type UserTurnMessage,
+  type PromptClient,
+} from "./submission.js";
+export {
   createAdapterContext,
   createHooks,
   createPlugin,

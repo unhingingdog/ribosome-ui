@@ -7,7 +7,6 @@ import {
 import {
   createKickoffManager,
   type KickoffManager,
-  type HarnessAttachMessage,
 } from "./kickoff.js";
 import {
   createConnectionManager,
@@ -18,12 +17,20 @@ import {
   createDeltaForwarder,
   type DeltaForwarder,
 } from "./delta.js";
+import {
+  createSubmissionInjector,
+  type SubmissionInjector,
+  type PromptClient,
+  type UserTurnMessage,
+} from "./submission.js";
 
 export interface AdapterContext {
   config: AdapterConfig;
   sessions: SessionMap;
   kickoff: KickoffManager;
   delta: DeltaForwarder;
+  submission: SubmissionInjector;
+  promptClient: PromptClient | null;
   harnessConn: ConnectionManager | null;
   wsFactory: WebSocketFactory;
   activeSessionIds: Set<string>;
@@ -39,11 +46,17 @@ export function createAdapterContext(
   const activeSessionIds = new Set<string>();
   const harnessSessionIdMap = new Map<string, string>();
   const delta = createDeltaForwarder(activeSessionIds, harnessSessionIdMap);
+  const submission = createSubmissionInjector(
+    activeSessionIds,
+    harnessSessionIdMap,
+  );
   return {
     config,
     sessions,
     kickoff,
     delta,
+    submission,
+    promptClient: null,
     harnessConn: null,
     wsFactory,
     activeSessionIds,
@@ -71,6 +84,37 @@ function parseStartResult(
     // output may not be JSON
   }
   return null;
+}
+
+function decodeHarnessInbound(data: string): UserTurnMessage | null {
+  try {
+    const parsed = JSON.parse(data);
+    if (
+      parsed &&
+      parsed.kind === "user_turn" &&
+      typeof parsed.session_id === "string" &&
+      typeof parsed.tree === "string" &&
+      typeof parsed.event === "string"
+    ) {
+      return parsed as UserTurnMessage;
+    }
+  } catch {
+    // non-JSON or other message types — ignore
+  }
+  return null;
+}
+
+async function injectSubmission(
+  ctx: AdapterContext,
+  payload: { sessionID: string; text: string },
+): Promise<void> {
+  if (!ctx.promptClient) return;
+  await ctx.promptClient.promptAsync({
+    path: { id: payload.sessionID },
+    body: {
+      parts: [{ type: "text" as const, text: payload.text }],
+    },
+  });
 }
 
 export function createHooks(ctx: AdapterContext): Hooks {
@@ -104,7 +148,14 @@ export function createHooks(ctx: AdapterContext): Hooks {
         ctx.harnessConn = createConnectionManager(
           harnessUrl,
           ctx.wsFactory,
-          () => {},
+          (data: string) => {
+            const userTurn = decodeHarnessInbound(data);
+            if (!userTurn) return;
+            const payload = ctx.submission.handleUserTurn(userTurn);
+            if (payload) {
+              injectSubmission(ctx, payload);
+            }
+          },
         );
       }
 
@@ -142,6 +193,10 @@ export function createHooks(ctx: AdapterContext): Hooks {
         if (completed && ctx.harnessConn) {
           ctx.harnessConn.send(JSON.stringify(completed));
         }
+        const next = ctx.submission.flushQueue(sessionID);
+        if (next) {
+          injectSubmission(ctx, next);
+        }
         return;
       }
 
@@ -158,6 +213,7 @@ export function createHooks(ctx: AdapterContext): Hooks {
             ctx.harnessConn.send(JSON.stringify(failed));
           }
           ctx.kickoff.clearActive(sessionID);
+          ctx.submission.clear(sessionID);
           ctx.activeSessionIds.delete(sessionID);
           ctx.harnessSessionIdMap.delete(sessionID);
         }
@@ -176,6 +232,7 @@ export function createHooks(ctx: AdapterContext): Hooks {
 
 export function createPlugin(
   wsFactory: WebSocketFactory,
+  promptClient: PromptClient | null,
   defaultConfig?: Partial<AdapterConfig>,
 ): (input: PluginInput, options?: PluginOptions) => Promise<Hooks> {
   return async (_input, options) => {
@@ -184,6 +241,7 @@ export function createPlugin(
       defaultConfig?.mcpToolName,
     );
     const ctx = createAdapterContext(config, wsFactory);
+    ctx.promptClient = promptClient;
     return createHooks(ctx);
   };
 }
