@@ -193,13 +193,19 @@ function SelectField(props: { node: TemplateSelect; onEvent: ComponentProps["onE
 }
 
 function ButtonField(props: { node: TemplateButton; onEvent: ComponentProps["onEvent"] }) {
+  const isSubmit = props.node.action === "Submit";
   return (
     <box
       border={true}
       borderStyle="single"
       borderColor={props.node.disabled ? "gray" : "blue"}
       focusable={!props.node.disabled}
-      on:Select={() => props.onEvent(props.node.id, "click")}
+      on:Select={() =>
+        props.onEvent(
+          props.node.id,
+          isSubmit ? "submit" : "click",
+        )
+      }
     >
       <text fg={props.node.disabled ? "gray" : "bright-white"}>
         {props.node.label}

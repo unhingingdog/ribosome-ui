@@ -217,10 +217,12 @@ function SelectField(props: { node: TemplateSelect; onEvent: ComponentProps["onE
 }
 
 function ButtonField(props: { node: TemplateButton; onEvent: ComponentProps["onEvent"] }) {
+  const isSubmit = props.node.action === "Submit";
   return (
     <button
+      type={isSubmit ? "submit" : "button"}
       disabled={props.node.disabled ?? false}
-      onClick={() => props.onEvent(props.node.id, "click")}
+      onClick={isSubmit ? undefined : () => props.onEvent(props.node.id, "click")}
     >
       {props.node.label}
     </button>
