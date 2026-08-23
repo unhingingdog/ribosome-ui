@@ -105,6 +105,40 @@ let test_attach_creates_session () =
       Alcotest.fail
         ("expected Ok for new session, got " ^ Ui_runtime.error_string e)
 
+let test_attach_seeds_home_template () =
+  reset ();
+  let registry = Session_registry.create () in
+  let broadcast = make_broadcast () in
+  let runtime = Ui_runtime.create ~registry ~broadcast in
+  let msg = Ui_protocol.Attach { session_id = "fresh"; revision = None } in
+  (match Ui_runtime.handle_message runtime msg with
+  | Ok () -> ()
+  | Error e ->
+      Alcotest.fail ("attach should succeed: " ^ Ui_runtime.error_string e));
+  Alcotest.(check int)
+    "one session_state" 1
+    (Stdlib.List.length !session_states);
+  match !session_states with
+  | (_, _, rev, tree_opt, gen_opt) :: _ -> (
+      Alcotest.(check int) "revision is 1" 1 rev;
+      Alcotest.(check bool) "has home tree" true (tree_opt <> None);
+      Alcotest.(check bool) "no active generation" true (gen_opt = None);
+      match tree_opt with
+      | Some tree_str ->
+          let tree = Yojson.Safe.from_string tree_str in
+          let kind_str =
+            match tree with
+            | `Assoc fields -> (
+                match Stdlib.List.assoc_opt "kind" fields with
+                | Some (`String s) -> Some s
+                | _ -> None)
+            | _ -> None
+          in
+          Alcotest.(check (option string))
+            "root is container" (Some "container") kind_str
+      | None -> Alcotest.fail "expected tree")
+  | [] -> Alcotest.fail "expected session_state"
+
 let test_change_broadcasts_update () =
   reset ();
   let runtime = make_runtime_with_tree () in
@@ -258,6 +292,8 @@ let () =
             test_attach_sends_snapshot;
           Alcotest.test_case "attach creates session" `Quick
             test_attach_creates_session;
+          Alcotest.test_case "attach seeds home template" `Quick
+            test_attach_seeds_home_template;
         ] );
       ( "events",
         [

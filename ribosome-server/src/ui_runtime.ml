@@ -47,6 +47,13 @@ let create ~registry ~broadcast =
 
 let register_session t ~session_id =
   let session = Ribosome.Session.create ~id:session_id ~mode:Ribosome.Mode.ui in
+  let session =
+    {
+      session with
+      Ribosome.Session.tree = Some Home_template.home_tree;
+      revision = 1;
+    }
+  in
   Hashtbl.add t.sessions session_id session
 
 let put_session t ~session_id session =
