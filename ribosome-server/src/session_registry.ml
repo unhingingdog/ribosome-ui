@@ -57,6 +57,22 @@ let start ?(mode = "ui") ~(id_gen : id_gen) ~(registry : t)
       Hashtbl.add registry.by_harness harness_session_id session_id;
       Ok entry
 
+let start_ui ~(registry : t) ~(session_id : string) =
+  let entry =
+    {
+      session_id;
+      mode = "ui";
+      harness_session_id = session_id;
+      harness_nonce = "pending";
+      ui_nonce = "pending";
+      ui_connections = [];
+      harness_connection = None;
+    }
+  in
+  Hashtbl.add registry.sessions session_id entry;
+  Hashtbl.add registry.by_harness session_id session_id;
+  Debug.log "registry" (Printf.sprintf "start_ui session_id=%s" session_id)
+
 let attach_ui registry session_id ~conn_id ~revision =
   match find registry session_id with
   | None -> Error `NotFound

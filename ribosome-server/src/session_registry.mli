@@ -30,6 +30,8 @@ val start :
   unit ->
   (entry, [> `Duplicate ]) result
 
+val start_ui : registry:t -> session_id:string -> unit
+
 val attach_ui :
   t ->
   string ->

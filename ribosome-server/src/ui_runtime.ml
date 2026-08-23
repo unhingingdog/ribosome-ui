@@ -56,7 +56,13 @@ let get_session t ~session_id = Hashtbl.find_opt t.sessions session_id
 
 let handle_attach t ~session_id ~revision =
   Debug.log "ui" (Printf.sprintf "attach session=%s revision=%s" session_id (match revision with Some r -> string_of_int r | None -> "none"));
-  match Session_registry.find t.registry session_id with
+  (match Session_registry.find t.registry session_id with
+   | None ->
+       Debug.log "ui" (Printf.sprintf "creating session %s (UI-initiated)" session_id);
+       Session_registry.start_ui ~registry:t.registry ~session_id;
+       register_session t ~session_id
+   | Some _ -> ());
+   match Session_registry.find t.registry session_id with
   | None -> Error InvalidSession
   | Some entry -> (
       (* UI nonce check would happen here once nonces are passed in *)
