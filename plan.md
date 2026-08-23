@@ -787,25 +787,11 @@ UI Client                     Server                      Harness Adapter
 
 **Acceptance**: navigating to `/templates` in the web app renders the storybook.
 
-### Phase 1 — Step B: Harness bidirectional, adapter, live conversation
+### Phase 1 — Step B: Adapter — proactive connect and live conversation
 
-#### Task 11.5: Extend Message_queue for harness outbound
+The server already sends `user_turn` to the harness WebSocket via `Connection_table.send` (done in the Message_queue → Connection_table refactor). Step B is purely adapter work.
 
-1. Add a second hashtable to `message_queue.ml` for harness-bound messages.
-2. Add `push_harness session_id msg` and `drain_harness session_id`.
-3. Update `.mli`.
-
-**Acceptance**: harness queue operates independently from UI queue.
-
-#### Task 11.6: Harness handler — drain outbound queue
-
-1. In `harness_handler.ml`, add drain-before-receive using `Lwt.pick` with a 1s timeout (adapter won't send messages until it receives a user_turn).
-2. Drain `Message_queue.drain_harness` and send to WebSocket.
-3. Also wire `send_user_turn` in `main.ml` to `Message_queue.push_harness` (fixes the existing no-op stub).
-
-**Acceptance**: messages pushed to harness queue are delivered to the adapter WebSocket.
-
-#### Task 11.7: Adapter — proactive connect and late attach
+#### Task 11.5: Adapter — proactive connect and late attach
 
 1. In `adapters/opencode/src/plugin.ts`, connect harness WS on plugin load (not waiting for start tool).
 2. On receiving `user_turn` from harness WS: send `attach` with session_id and `"pending"` nonce, then call `promptAsync` with the user turn content.
@@ -813,7 +799,7 @@ UI Client                     Server                      Harness Adapter
 
 **Acceptance**: UI submit triggers agent generation without agent calling start tool first.
 
-#### Task 11.8: End-to-end demo
+#### Task 11.6: End-to-end demo
 
 1. Update `demo.sh` messaging for the new flow.
 2. Start server + web → UI shows home screen → type subject → submit → agent generates → UI renders.
@@ -823,12 +809,12 @@ UI Client                     Server                      Harness Adapter
 
 ### Phase 2 — Session listing (future)
 
-#### Task 11.9: Harness protocol — session list
+#### Task 11.7: Harness protocol — session list
 
 1. Add `SessionList` message (adapter→server): `{ sessions : [{ id : string; title : string; status : string }] }`.
 2. Adapter proactively sends on connect and whenever sessions change.
 
-#### Task 11.10: Server — cache session list, build home template dynamically
+#### Task 11.8: Server — cache session list, build home template dynamically
 
 1. `Harness_runtime` stores latest `SessionList`.
 2. Home template builder includes session buttons from cached list.
