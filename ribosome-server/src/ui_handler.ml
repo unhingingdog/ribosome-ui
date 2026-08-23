@@ -9,7 +9,19 @@ let max_message_size = 1 lsl 20 (* 1 MiB *)
 let handle_websocket ~runtime websocket =
   let open Lwt.Syntax in
   Debug.log "ui_ws" "connection opened";
+  let session_id = ref None in
+  let drain sid =
+    let msgs = Message_queue.drain sid in
+    let rec send = function
+      | [] -> Lwt.return_unit
+      | m :: rest ->
+          let* () = Dream.send websocket m in
+          send rest
+    in
+    send msgs
+  in
   let rec loop () =
+    let* () = match !session_id with Some sid -> drain sid | None -> Lwt.return_unit in
     let* msg = Dream.receive websocket in
     match msg with
     | None -> begin
@@ -26,8 +38,11 @@ let handle_websocket ~runtime websocket =
             match Ui_protocol.decode_message json with
             | Ok ui_msg -> (
                 Debug.log "ui_ws" (Printf.sprintf "decoded msg len=%d" (String.length data));
+                (match ui_msg with Ui_protocol.Attach a -> session_id := Some a.session_id | _ -> ());
                 match Ui_runtime.handle_message runtime ui_msg with
-                | Ok _ -> loop ()
+                | Ok _ ->
+                    let* () = match !session_id with Some sid -> drain sid | None -> Lwt.return_unit in
+                    loop ()
                 | Error e ->
                     Debug.log "ui_ws" (Printf.sprintf "runtime error, closing: %s" (Ui_runtime.error_string e));
                     let* () = Dream.close_websocket websocket in

@@ -45,24 +45,62 @@ let make_runtimes config =
   let h_broadcast =
     {
       Ribosome_server_lib.Harness_runtime.broadcast_template_update =
-        (fun ~session_id ~revision ~tree:_ ->
-          Debug.log "harness_broadcast" (Printf.sprintf "template_update session=%s rev=%d" session_id revision));
+        (fun ~session_id ~revision ~tree ->
+          Debug.log "harness_broadcast" (Printf.sprintf "template_update session=%s rev=%d" session_id revision);
+          let msg = Yojson.Safe.to_string (`Assoc [
+            ("kind", `String "template_update");
+            ("session_id", `String session_id);
+            ("revision", `Int revision);
+            ("tree", `String tree)
+          ]) in
+          Ribosome_server_lib.Message_queue.push session_id msg);
     }
   in
   let u_broadcast =
     {
       Ribosome_server_lib.Ui_runtime.broadcast_template_update =
-        (fun ~session_id ~revision ~tree:_ ->
-          Debug.log "ui_broadcast" (Printf.sprintf "template_update session=%s rev=%d" session_id revision));
+        (fun ~session_id ~revision ~tree ->
+          Debug.log "ui_broadcast" (Printf.sprintf "template_update session=%s rev=%d" session_id revision);
+          let msg = Yojson.Safe.to_string (`Assoc [
+            ("kind", `String "template_update");
+            ("session_id", `String session_id);
+            ("revision", `Int revision);
+            ("tree", `String tree)
+          ]) in
+          Ribosome_server_lib.Message_queue.push session_id msg);
       broadcast_session_state =
-        (fun ~session_id ~mode ~revision ~tree:_ ~generation_id:_ ->
-          Debug.log "ui_broadcast" (Printf.sprintf "session_state session=%s mode=%s rev=%d" session_id mode revision));
+        (fun ~session_id ~mode ~revision ~tree ~generation_id ->
+          Debug.log "ui_broadcast" (Printf.sprintf "session_state session=%s mode=%s rev=%d" session_id mode revision);
+          let fields = [
+            ("kind", `String "session_state");
+            ("session_id", `String session_id);
+            ("mode", `String mode);
+            ("revision", `Int revision);
+          ] in
+          let fields = match tree with
+            | Some t -> fields @ [("tree", `String t)]
+            | None -> fields
+          in
+          let fields = match generation_id with
+            | Some g -> fields @ [("generation_id", `String g)]
+            | None -> fields
+          in
+          let msg = Yojson.Safe.to_string (`Assoc fields) in
+          Ribosome_server_lib.Message_queue.push session_id msg);
       broadcast_event_rejection =
-        (fun ~session_id ~event_id ~reason:_ ->
-          Debug.log "ui_broadcast" (Printf.sprintf "event_rejection session=%s event=%s" session_id event_id));
+        (fun ~session_id ~event_id ~reason ->
+          Debug.log "ui_broadcast" (Printf.sprintf "event_rejection session=%s event=%s" session_id event_id);
+          let msg = Yojson.Safe.to_string (`Assoc [
+            ("kind", `String "event_rejection");
+            ("session_id", `String session_id);
+            ("event_id", `String event_id);
+            ("reason", `String (Ribosome_server_lib.Ui_protocol.rejection_reason_to_string reason))
+          ]) in
+          Ribosome_server_lib.Message_queue.push session_id msg);
       send_user_turn =
         (fun ~session_id ~tree:_ ~event:_ ->
-          Debug.log "ui_broadcast" (Printf.sprintf "user_turn session=%s" session_id));
+          Debug.log "ui_broadcast" (Printf.sprintf "user_turn session=%s" session_id);
+          ());
     }
   in
   let harness =
