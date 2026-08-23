@@ -12,6 +12,8 @@ type rejection = Harness_protocol.rejection_reason
 
 val create : registry:Session_registry.t -> broadcast:broadcast -> t
 val register_session : t -> session_id:string -> unit
+val put_session : t -> session_id:string -> Ribosome.Session.t -> unit
+val get_session : t -> session_id:string -> Ribosome.Session.t option
 
 val handle_message :
   t -> Harness_protocol.message -> (handle_result, rejection) result

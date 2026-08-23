@@ -14,5 +14,4 @@ module Mode = Mode
 module Mode_registry = Mode_registry
 module Session = Session
 
-let processor = Telomere.Processor.create_processor
 let version = "0.0.0"

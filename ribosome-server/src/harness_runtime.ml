@@ -37,6 +37,11 @@ let register_session t ~session_id =
   let session = Ribosome.Session.create ~id:session_id ~mode:Ribosome.Mode.ui in
   Hashtbl.add t.sessions session_id session
 
+let put_session t ~session_id session =
+  Hashtbl.replace t.sessions session_id session
+
+let get_session t ~session_id = Hashtbl.find_opt t.sessions session_id
+
 let handle_attach t ~session_id ~harness_session_id ~nonce =
   match Session_registry.find t.registry session_id with
   | None -> Error InvalidSession

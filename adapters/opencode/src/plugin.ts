@@ -23,6 +23,7 @@ import {
   type PromptClient,
   type UserTurnMessage,
 } from "./submission.js";
+import { logInfo, logWarn, logError, setLogSink, createStderrSink } from "./diagnostics.js";
 
 export interface AdapterContext {
   config: AdapterConfig;
@@ -122,6 +123,10 @@ export function createHooks(ctx: AdapterContext): Hooks {
     "tool.execute.before": async (input, output) => {
       if (!isStartTool(input.tool, ctx.config)) return;
       const pending = ctx.kickoff.recordPending(input.callID, input.sessionID);
+      logInfo("kickoff", "injecting nonce for start tool", {
+        sessionId: input.sessionID,
+        callId: input.callID,
+      });
       if (output.args && typeof output.args === "object") {
         (output.args as Record<string, unknown>)._harness_session_id =
           pending.sessionID;
@@ -133,6 +138,10 @@ export function createHooks(ctx: AdapterContext): Hooks {
       if (!isStartTool(input.tool, ctx.config)) return;
       const result = parseStartResult(output.output);
       if (!result) {
+        logWarn("kickoff", "start tool returned non-JSON output, clearing pending", {
+          sessionId: input.sessionID,
+          callId: input.callID,
+        });
         ctx.kickoff.clearPending(input.callID);
         return;
       }
@@ -141,7 +150,18 @@ export function createHooks(ctx: AdapterContext): Hooks {
         result.session_id,
         result.ui_nonce,
       );
-      if (!attachMsg) return;
+      if (!attachMsg) {
+        logError("kickoff", "no pending kickoff found for call", {
+          sessionId: input.sessionID,
+          callId: input.callID,
+        });
+        return;
+      }
+
+      logInfo("kickoff", "activated session, connecting harness", {
+        sessionId: input.sessionID,
+        callId: input.callID,
+      });
 
       if (!ctx.harnessConn) {
         const harnessUrl = ctx.config.serverUrl + "/v1/harness";
@@ -153,8 +173,17 @@ export function createHooks(ctx: AdapterContext): Hooks {
             if (!userTurn) return;
             const payload = ctx.submission.handleUserTurn(userTurn);
             if (payload) {
+              logInfo("submission", "injecting user turn", {
+                sessionId: payload.sessionID,
+              });
               injectSubmission(ctx, payload);
             }
+          },
+          () => {
+            logInfo("harness", "websocket connected");
+          },
+          () => {
+            logWarn("harness", "websocket disconnected, will reconnect");
           },
         );
       }
@@ -195,6 +224,9 @@ export function createHooks(ctx: AdapterContext): Hooks {
         }
         const next = ctx.submission.flushQueue(sessionID);
         if (next) {
+          logInfo("submission", "flushing queued submission", {
+            sessionId: sessionID,
+          });
           injectSubmission(ctx, next);
         }
         return;
@@ -203,6 +235,9 @@ export function createHooks(ctx: AdapterContext): Hooks {
       if (ev.type === "session.error") {
         const sessionID = ev.properties.sessionID;
         if (sessionID) {
+          logError("session", "session error, clearing state", {
+            sessionId: sessionID,
+          });
           const failed = ctx.delta.handleSessionError(
             sessionID,
             ev.properties.error
@@ -222,6 +257,7 @@ export function createHooks(ctx: AdapterContext): Hooks {
     },
 
     dispose: async () => {
+      logInfo("adapter", "disposing");
       if (ctx.harnessConn) {
         ctx.harnessConn.close();
         ctx.harnessConn = null;
@@ -232,16 +268,19 @@ export function createHooks(ctx: AdapterContext): Hooks {
 
 export function createPlugin(
   wsFactory: WebSocketFactory,
-  promptClient: PromptClient | null,
   defaultConfig?: Partial<AdapterConfig>,
 ): (input: PluginInput, options?: PluginOptions) => Promise<Hooks> {
-  return async (_input, options) => {
+  return async (input, options) => {
     const config = createConfig(
       defaultConfig?.serverUrl ?? "ws://127.0.0.1:8787",
       defaultConfig?.mcpToolName,
     );
     const ctx = createAdapterContext(config, wsFactory);
-    ctx.promptClient = promptClient;
+    ctx.promptClient = input.client as unknown as PromptClient;
+
+    setLogSink(createStderrSink());
+    logInfo("adapter", "plugin loaded", { sessionId: undefined });
+
     return createHooks(ctx);
   };
 }

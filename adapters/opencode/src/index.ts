@@ -48,3 +48,15 @@ export {
   createPlugin,
   type AdapterContext,
 } from "./plugin.js";
+export {
+  log,
+  logInfo,
+  logWarn,
+  logError,
+  setLogSink,
+  resetLogSink,
+  createStderrSink,
+  type LogLevel,
+  type LogEntry,
+  type LogSink,
+} from "./diagnostics.js";

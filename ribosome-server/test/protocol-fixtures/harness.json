@@ -1,0 +1,50 @@
+{
+  "version": "0.0.0",
+  "protocol": "harness",
+  "messages": {
+    "attach": {
+      "kind": "attach",
+      "session_id": "rs-1",
+      "harness_session_id": "oc-1",
+      "nonce": "oc-abc123"
+    },
+    "delta": {
+      "kind": "delta",
+      "session_id": "rs-1",
+      "generation_id": "msg-1",
+      "seq": 0,
+      "content": "{\"kind\":\"text\""
+    },
+    "generation_completed": {
+      "kind": "generation_completed",
+      "session_id": "rs-1",
+      "generation_id": "msg-1"
+    },
+    "generation_failed": {
+      "kind": "generation_failed",
+      "session_id": "rs-1",
+      "generation_id": "msg-1",
+      "reason": "timeout"
+    },
+    "user_turn": {
+      "kind": "user_turn",
+      "session_id": "rs-1",
+      "tree": "{\"kind\":\"container\",\"id\":\"root\",\"direction\":\"Vertical\",\"children\":[]}",
+      "event": "null"
+    },
+    "ack": {
+      "kind": "ack",
+      "session_id": "rs-1",
+      "generation_id": "msg-1",
+      "seq": 0
+    },
+    "rejection": {
+      "kind": "rejection",
+      "session_id": "rs-1",
+      "reason": "invalid_session"
+    }
+  },
+  "enum_strings": {
+    "rejection_reasons": ["invalid_session", "invalid_generation", "invalid_sequence", "malformed_payload"]
+  }
+}

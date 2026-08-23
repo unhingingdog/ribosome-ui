@@ -15,4 +15,6 @@
   lexer_non_string_data
   lexer_quote
   lexer_string_data
-  lexer_types))
+  lexer_types)
+ (flags
+  (:standard -w +A-4-40-41-42-44-50-70)))

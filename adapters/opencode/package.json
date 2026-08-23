@@ -3,14 +3,17 @@
   "version": "0.0.0",
   "description": "Thin harness adapter connecting OpenCode to Ribosome UI server",
   "type": "module",
+  "main": "./dist/entry.js",
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
   },
   "dependencies": {
     "@opencode-ai/plugin": "*"
   },
   "devDependencies": {
+    "@types/node": "^26.2.0",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
   }

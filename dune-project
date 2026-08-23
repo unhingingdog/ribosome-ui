@@ -39,18 +39,4 @@
   (alcotest (and :with-test (>= 1.8.0)))
   (alcotest-lwt (and :with-test (>= 1.8.0)))))
 
-;; Legacy Melange/React web implementation. Kept only so the historical opam
-;; file remains valid until Task 8.1 deletes it and the legacy directories.
-;; No buildable target references these libraries because the root [dune]
-;; restricts dirs to the native packages.
-(package
- (name ribosome-ui)
- (synopsis "Legacy Melange/React web implementation (deprecated, pending removal)")
- (allow_empty)
- (depends
-  (ocaml (>= 5.2))
-  melange
-  reason-react
-  reason-react-ppx
-  melange-json
-  melange-json-native))
+;; No legacy Melange/React packages — removed in Feature 8.

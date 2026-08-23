@@ -1,0 +1,77 @@
+{
+  "version": "0.0.0",
+  "protocol": "ui",
+  "messages": {
+    "attach": {
+      "kind": "attach",
+      "session_id": "rs-1"
+    },
+    "attach_with_revision": {
+      "kind": "attach",
+      "session_id": "rs-1",
+      "revision": 3
+    },
+    "component_event_click": {
+      "kind": "component_event",
+      "session_id": "rs-1",
+      "revision": 1,
+      "event_id": "evt-1",
+      "target_id": "btn1",
+      "component_kind": "click"
+    },
+    "component_event_change": {
+      "kind": "component_event",
+      "session_id": "rs-1",
+      "revision": 1,
+      "event_id": "evt-2",
+      "target_id": "inp1",
+      "component_kind": "change",
+      "value": "hello"
+    },
+    "component_event_submit": {
+      "kind": "component_event",
+      "session_id": "rs-1",
+      "revision": 1,
+      "event_id": "evt-3",
+      "target_id": "form1",
+      "component_kind": "submit"
+    },
+    "cancel": {
+      "kind": "cancel",
+      "session_id": "rs-1"
+    },
+    "disconnect": {
+      "kind": "disconnect",
+      "session_id": "rs-1"
+    },
+    "session_state": {
+      "kind": "session_state",
+      "session_id": "rs-1",
+      "mode": "ui",
+      "revision": 1,
+      "tree": "{\"kind\":\"container\",\"id\":\"root\",\"direction\":\"Vertical\",\"children\":[]}"
+    },
+    "template_update": {
+      "kind": "template_update",
+      "session_id": "rs-1",
+      "revision": 2,
+      "tree": "{\"kind\":\"container\",\"id\":\"root\",\"direction\":\"Vertical\",\"children\":[]}"
+    },
+    "event_rejection_stale": {
+      "kind": "event_rejection",
+      "session_id": "rs-1",
+      "event_id": "evt-1",
+      "reason": "stale_revision"
+    },
+    "event_rejection_duplicate": {
+      "kind": "event_rejection",
+      "session_id": "rs-1",
+      "event_id": "evt-1",
+      "reason": "duplicate_event_id"
+    }
+  },
+  "enum_strings": {
+    "component_kinds": ["click", "change", "submit"],
+    "rejection_reasons": ["stale_revision", "duplicate_event_id"]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "mcp": {
+    "ribosome": {
+      "type": "local",
+      "command": ["ribosome-server", "--stdio", "--port", "8787"],
+      "enabled": true
+    }
+  },
+  "plugin": {
+    "ribosome": ["@ribosome/opencode-adapter"]
+  }
+}

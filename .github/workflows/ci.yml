@@ -1,0 +1,69 @@
+name: ribosome
+
+on:
+  push:
+    branches: [main, rebuild/native]
+  pull_request:
+    branches: [main]
+
+jobs:
+  native:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        ocaml-version: ["5.2"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-version }}
+          dune-cache: true
+          opam-pin: false
+
+      - name: Install dependencies
+        run: |
+          opam install . --deps-only --with-test --yes
+          opam install opam-lint --yes
+
+      - name: Build
+        run: opam exec -- dune build @all
+
+      - name: Test
+        run: opam exec -- dune runtest
+
+      - name: Format check
+        run: opam exec -- dune fmt --check
+
+      - name: Lint opam packages
+        run: |
+          opam lint telomere.opam
+          opam lint ribosome.opam
+          opam lint ribosome-server.opam
+
+  adapter:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        working-directory: adapters/opencode
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: adapters/opencode/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npx vitest run

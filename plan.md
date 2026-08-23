@@ -608,3 +608,36 @@ Final acceptance requires:
 - WebSocket UI transport with complete submissions.
 - Full two-turn protocol test.
 - No direct dependency from `ribosome` to MCP, Dream, WebSockets, or OpenCode.
+
+---
+
+## Exploration: Subtree-scoped user turns and MCP tree queries
+
+Instead of sending the full template tree on every `user_turn`, send only the
+relevant subtree:
+
+- For **submit**: the submittable node (form + its fields with current values).
+- For **click**: the parent container of the clicked button.
+- For **change**: no harness message (unchanged from current design).
+
+Add an MCP tool `get_tree` that lets the agent query the current authoritative
+tree on demand:
+
+- `get_tree(session_id, node_id?)` — returns the subtree rooted at `node_id`,
+  or the full tree if `node_id` is omitted.
+- Agent can pull context when it needs broader visibility, rather than always
+  receiving the full tree on every interaction.
+
+Benefits to evaluate:
+
+- Token efficiency: a large UI with one form submit doesn't flood the agent
+  with irrelevant siblings.
+- Agent agency: pull-based context instead of push-only.
+- Action clarity: compact `user_turn` with just the touched subtree + event.
+
+Open questions:
+
+- Should `get_tree` return revision metadata so the agent can detect stale
+  reads?
+- Should changes also be queryable, or remain fire-and-forget on the UI side?
+- How does this interact with the queued-submission design in the adapter?

@@ -1,8 +1,0 @@
-(include_subdirs qualified)
-
-(library
- (name ribosome_ui)
- (modes melange)
- (libraries melange melange-json telomere reason-react melange-fetch)
- (preprocess
-  (pps melange.ppx melange-json.ppx reason-react-ppx)))

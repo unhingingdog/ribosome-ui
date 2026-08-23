@@ -1,5 +1,0 @@
-(melange.emit
- (target output)
- (promote (until-clean))
- (libraries ribosome_ui telomere)
- (module_systems es6))

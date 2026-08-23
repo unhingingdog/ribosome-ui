@@ -1,186 +1,199 @@
 # Ribosome Architecture
 
-Ribosome is a native OCaml server that turns a coding-agent harness into a generative-UI runtime. An agent calls Ribosome through MCP to start a UI turn; the harness forwards raw assistant token deltas over a dedicated streaming channel; Ribosome feeds every delta through Telomere, decodes closable candidates into a fixed typed template ADT, reconciles them by stable ID, and broadcasts revisioned updates to any attached UI client. User submissions travel back over the UI channel as one complete semantic event, become one authoritative typed tree, and start the next agent turn through the harness adapter.
+Ribosome turns an agent harness into a generative-UI runtime. An agent calls the MCP `start` tool; the harness forwards raw assistant deltas over a dedicated WebSocket; every delta feeds through Telomere, decodes into a typed template ADT, reconciles by stable ID, and broadcasts revisioned updates to UI clients. User submissions return as a complete semantic event that starts the next harness turn.
+
+```
+                  ┌──────────────┐
+                  │ Agent Harness │  (OpenCode / Codex / Pi)
+                  └──┬────────┬──┘
+              MCP    │        │   assistant deltas
+            control  │        │
+                     ▼        ▼
+              ┌──────────┐  ┌──────────┐
+              │   MCP    │  │ Harness  │
+              │(stdio)   │  │ Stream   │
+              └────┬─────┘  └────┬─────┘
+                   │             │
+                   │   ┌─────────▼──────────┐
+                   │   │  Telomere           │
+                   │   │  → Decode → Validate│
+                   │   │  → Reconcile        │
+                   └──►│  → Session          │
+                       └─────────┬──────────┘
+                                 │ revisioned
+                                 │ updates
+                          ┌──────▼──────┐
+                          │  UI Client  │
+                          │ (TUI/Web/   │
+                          │  Native)    │
+                          └─────────────┘
+```
 
 ## Invariants
 
-- Every generated template delta passes through Telomere. No path may batch, debounce, or bypass token-level streaming.
-- `ribosome` owns a closed OCaml template ADT. Clients do not define template kinds.
-- The core knows nothing about MCP, Dream, WebSockets, OpenCode, Codex, or rendering.
-- WebSockets are one server adapter, not the core UI abstraction.
-- MCP is the control plane, not the delta transport.
-- Submissions are complete trees, never token-streamed back to the harness.
-- The only retained TypeScript is a thin harness adapter where the host requires it.
-
-## Planes
-
-```mermaid
-flowchart TD
-  Harness[Agent Harness\nOpenCode / Codex / Pi]
-  Adapter[Harness Adapter]
-  Mcp[MCP Control\nribosome-server]
-  Stream[Harness Stream\nribosome-server]
-  Core[ribosome core\nTelomere + ADT + reconcile]
-  Ui[UI Transport\nribosome-server]
-  Client[UI Client\nTUI / Web / Native]
-
-  Harness -->|MCP initialize / tools/call start| Mcp
-  Mcp -->|session, skill bundle, nonce| Adapter
-  Harness -->|assistant token deltas| Adapter
-  Adapter -->|generation delta| Stream
-  Stream --> Core
-  Core -->|revisioned template update| Ui
-  Ui -->|template update| Client
-  Client -->|complete semantic event| Ui
-  Ui -->|user turn| Adapter
-  Adapter -->|new harness turn| Harness
-```
-
-### MCP control plane
-
-The harness calls Ribosome as an MCP server over stdio. Ribosome implements a minimal tested subset: `initialize`, `notifications/initialized`, `ping`, `tools/list`, and one tool `start`. The `start` tool accepts a mode (default `ui`), plus adapter-injected harness session ID and a channel nonce. Its result returns session metadata as structured content and the selected skill body as model-visible content, ending with instructions that the next assistant response must be raw template JSON only. MCP is not used to transport deltas; standard `tools/call` delivers only complete arguments.
-
-### Harness stream plane
-
-After kickoff, the harness adapter opens a WebSocket to `/v1/harness` and authenticates with the nonce injected at `start`. It forwards every native assistant delta as one harness delta message carrying generation ID and a monotonically increasing sequence number. Terminal generation events become `completed` or `failed`. The server sends `userTurn` messages back to the adapter, each containing the full authoritative typed tree plus the semantic event; the adapter starts the next harness turn through the host's native session API. The harness protocol transports raw deltas without knowing OpenCode, Codex, or Pi types.
-
-### Core pipeline
-
-```mermaid
-flowchart LR
-  Delta[Harness delta] --> Telomere
-  Telomere -->|Completion suffix| Decode
-  Decode -->|typed template| Validate
-  Validate --> Reconcile
-  Reconcile -->|revisioned tree| Session
-  Session -->|template update| UI
-```
-
-Every delta feeds `Telomere.Processor.feed`. On `Completion suffix`, Ribosome decodes `buffer ^ suffix` into the typed ADT, validates invariants, and reconciles against the committed tree by stable ID. Valid commits increment the session revision and emit a template update. Decode, validation, and reconciliation failures do not mutate committed state while generation continues. Corrupted processors permanently stop candidate commits.
-
-### UI plane
-
-UI clients attach over WebSocket to `/v1/ui` with their session nonce. On attach they receive the current `sessionState` snapshot. Each committed revision broadcasts a `templateUpdate`. Clients send `componentEvent` messages (`click`, `change`, `submit`) carrying event ID and base revision. `change` events apply locally and broadcast immediately; `click` and `submit` events produce one `userTurn` for the harness adapter. Stale revisions and duplicate event IDs are rejected. Reconnect from a known revision resends the snapshot.
+- Every delta feeds through **Telomere**. Nothing batches, debounces, or bypasses token-level streaming.
+- `ribosome` owns a **closed OCaml template ADT**. Clients don't define template kinds.
+- The core knows nothing about MCP, Dream, WebSockets, or any specific harness.
+- MCP is the **control plane**, not the delta transport.
+- Submissions are **complete trees**, never token-streamed back.
+- The only TypeScript is a **thin harness adapter** (`adapters/opencode/`).
 
 ## Packages
 
-```mermaid
-flowchart LR
-  Telomere[telomere]
-  Ribosome[ribosome]
-  Server[ribosome-server]
-  Adapter[adapters/opencode]
-
-  Ribosome --> Telomere
-  Server --> Ribosome
-  Adapter -.WebSocket.-> Server
-  Adapter -.MCP stdio.-> Server
+```
+telomere ──► ribosome ──► ribosome-server
+                │                │
+                └── yojson ──────┴── dream, lwt, cmdliner
 ```
 
-| Package | Responsibility | Dependencies |
+| Package | Responsibility | Deps |
 |---|---|---|
-| `telomere` | Incremental JSON completion | OCaml stdlib |
-| `ribosome` | Typed template ADT, codec, validation, reconciliation, session state, modes | `telomere`, `yojson` |
-| `ribosome-server` | MCP subset, harness and UI protocols, Dream WebSocket transport, session registry, runtime | `ribosome`, `yojson`, `lwt`, `dream`, `cmdliner` |
+| `telomere` | Incremental JSON completion | stdlib |
+| `ribosome` | Template ADT, codec, validation, reconciliation, session, modes | `telomere`, `yojson` |
+| `ribosome-server` | MCP, harness/UI protocols, Dream WebSocket, registry, runtimes | `ribosome`, `yojson`, `lwt`, `dream`, `cmdliner` |
 | `adapters/opencode` | Thin TypeScript harness adapter | `@opencode-ai/plugin`, vitest |
 
-Test dependencies: `alcotest`, `alcotest-lwt`, `qcheck-core`, `qcheck-alcotest`.
+All three OCaml packages have warnings-as-errors enabled. Codec helpers (`Codec_decode`, `Codec_encode`, `Codec_error`) are private modules in `ribosome` — accessible only through `Template.CodecError`/`Decode`/`Encode` aliases.
 
-## Target Layout
+## Planes
 
-```text
-dune-project
-dune
-telomere/        src/ test/
-ribosome/        src/template/ src/codec/ test/
-ribosome-server/ src/ bin/ test/
-adapters/opencode/
-skills/ribosome/SKILL.md
-protocol-fixtures/
-architecture.md
-plan.md
-README.md
+### MCP control plane
+
+```
+  Harness                    ribosome-server
+  ───────                    ──────────────
+  │  initialize        ────►  Mcp.process
+  │  tools/call start  ────►  session registry
+  │                           skill bundle
+  │◄─── session nonce   ────  adapter attaches harness WS
 ```
 
-## Template Model
+The harness calls Ribosome as an MCP server over **stdio**. Supported operations: `initialize`, `notifications/initialized`, `ping`, `tools/list`, `tools/call start`. The `start` tool returns session metadata + the mode's skill body as model-visible content, followed by "next response must be raw template JSON only." Deltas are **not** transported through MCP.
 
-Ribosome ships a closed ADT. The initial primitive set matches the `ratatui-port` reference:
+### Harness stream plane
 
-- `text` (Paragraph, H1-H6) with `value`
-- `image` (`src`, `alt`)
-- `badge` (`label`, `variant`)
-- `stat` (`label`, `value`, optional `secondary`)
-- `divider` (optional `label`)
-- `diagram` (`title`, `size`, typed primitives: text, line, arrow, rectangle, circle, polyline with tones)
-- `code` (`path`, `language`, `line_start`, `source`, typed highlights with tones)
-- `container` (`direction`: Vertical | Horizontal, `children`)
-- `list` (optional `ordered`, `children`)
-- `submittable` (`value` of input/select fields, optional `button`)
-- `input` (string or int `value`)
-- `select` (`label`, `options`, optional `selected`)
-- `button` (`label`, `action`: Submit | Navigate | Custom)
+```
+  Adapter                   ribosome-server
+  ───────                   ──────────────
+  │  attach(nonce)    ────►  authenticate
+  │  delta(gen,seq,text)──►  Telomere.feed → ADT → reconcile
+  │  completed(gen)   ────►  commit, broadcast
+  │  failed(gen)      ────►  discard
+  │◄── userTurn(tree,event)─ submit → next harness turn
+```
 
-There is no public `Broken` variant; decode failures are errors while generation continues. Nested-only kinds (`input`, `select`, `button`) are rejected at the root.
+The adapter authenticates with the start-tool nonce over `/v1/harness` WebSocket, then forwards one delta per native assistant token. Terminal events are `completed` or `failed`. Sequence numbers are per-generation, starting at 0. The server sends `userTurn` back as a complete typed tree + semantic event.
+
+### Core pipeline
+
+```
+  delta ──► Telomere.feed ──► Completion(suffix)
+              │                    │
+              │ Pending            ▼
+              │              decode(buffer^suffix)
+              │                    │
+              │                    ▼
+              │              validate invariants
+              │                    │
+              │                    ▼
+              │           reconcile by stable ID
+              │                    │
+              │                    ▼
+              │             commit → revision++
+              │                    │
+              ▼                    ▼
+           wait for             broadcast
+           next delta           templateUpdate
+```
+
+Every delta feeds `Telomere.Processor.feed`. `Pending` → wait. `Completion suffix` → decode `buffer ^ suffix` into ADT, validate, reconcile. Valid commits increment revision. Decode/validation/reconciliation failures don't mutate state while generation continues. `Corrupted` permanently stops candidates for that processor.
+
+### UI plane
+
+```
+  Client                    ribosome-server
+  ──────                    ──────────────
+  │◄── sessionState  ─────── attach(session)
+  │◄── templateUpdate ────── each committed revision
+  │──► componentEvent ─────► click / change / submit
+  │                           (eventID, baseRevision)
+  │◄── eventRejection ────── stale revision / duplicate
+```
+
+Click and submit events produce one `userTurn` broadcast. Change events apply locally and broadcast immediately. Stale revisions and duplicate event IDs are rejected. Reconnect from a known revision resends the snapshot.
+
+## Template ADT
+
+The closed OCaml variant maps to JSON `kind` fields. All templates carry a stable `id`.
+
+```
+  Template.t
+  ├── Text      { id, text_type: Paragraph|H1..H6, value }
+  ├── Image     { id, src, alt }
+  ├── Badge     { id, label, variant: Neutral|Success|Warning|Error|Info }
+  ├── Stat      { id, label, value, secondary? }
+  ├── Divider   { id }
+  ├── Diagram   { id, diagram_type }
+  ├── Code      { id, path, language, line_start, source, highlights[] }
+  ├── Container { id, direction: Vertical|Horizontal, children }
+  ├── List      { id, ordered?, children }
+  └── Submittable { id, button_id }
+```
+
+Nested-only templates:
+```
+  Input    { id, value?: Int|String }     ── only inside Submittable
+  Select   { id, options[], value? }      ── only inside Submittable
+  Button   { id, label, action: Submit|Navigate|Custom, disabled }
+  Tone     { id, text }                   ── only on diagram/code highlights
+```
+
+No public `Broken` variant. Decode failures are errors while generation continues.
 
 ## Session State
 
 ```ocaml
-type session = {
-  id: string;
-  mode: Mode.t;
-  tree: Template.t option;
-  revision: int;
-  generation: generation option;
-  stream: Incremental.state;
-  ui_connections: connection list;
-  harness_connection: connection option;
-  recent_event_ids: string list;
+type generation = { id : string; next_seq : int }
+
+type t = {
+  id : string;
+  mode : Mode.t;
+  tree : Template.t option;
+  revision : int;
+  generation : generation option;
+  incremental : Incremental.state;
+  recent_event_ids : string list;
 }
 ```
 
-Generation IDs are opaque strings. Deltas carry monotonically increasing sequence numbers. Telomere state resets at generation start while preserving the committed tree. Event IDs are deduplicated within a bounded window. The core session type contains no Codex, OpenCode, Dream, or WebSocket types.
+Generation IDs are opaque. Sequences reset per generation at 0. Telomere state resets at generation start while preserving committed tree. Event IDs deduplicate within a bounded window. No harness, MCP, Dream, or WebSocket types in the session record.
 
 ## Submission Flow
 
-```mermaid
-sequenceDiagram
-  participant UI as UI Client
-  participant Server as ribosome-server
-  participant Adapter as Harness Adapter
-  participant Harness as Agent Harness
-
-  UI->>Server: componentEvent (submit, baseRevision, values)
-  Server->>Server: reduce event against tree
-  Server->>Server: produce authoritative typed tree
-  Server->>Adapter: userTurn (full tree, semantic event)
-  Adapter->>Harness: new turn with tree + event
-  Harness-->>Adapter: assistant token deltas
-  Adapter->>Server: generation delta (per token)
-  Server->>UI: templateUpdate (per revision)
+```
+  UI Client          Server             Adapter           Harness
+  ─────────          ──────             ───────           ───────
+  │ submit(form1, ▲2)│                   │                  │
+  │─────────────────►│                   │                  │
+  │                   │ reduce event     │                  │
+  │                   │ produce tree     │                  │
+  │                   │ userTurn(tree,   │                  │
+  │                   │   event)         │                  │
+  │                   │─────────────────►│                  │
+  │                   │                  │ new turn(tree)   │
+  │                   │                  │─────────────────►│
+  │                   │                  │                  │
+  │                   │                  │◄── deltas ───────│
+  │                   │◄── delta ────────│                  │
+  │                   │                  │                  │
+  │◄── templateUpdate │                  │                  │
 ```
 
-No user input is token-streamed back. The complete tree is submitted at once, the adapter serializes it once, and the harness sees one new user turn.
-
-## Modes And Skills
-
-A mode is a named bundle of skill references. The initial overhaul ships only the `ui` mode, which returns the canonical `skills/ribosome/SKILL.md`. The skill is updated for container direction, code, and diagram primitives, and states that the next assistant response must be raw template JSON only. The mode registry supports adding `code`, `explore`, and other modes later without core changes. The skill is checked against the canonical template registry so every advertised kind exists in the ADT.
-
-## Harness Adapters
-
-Each harness needs a thin adapter that:
-
-- Correlates the Ribosome MCP `start` call with the native harness session.
-- Captures assistant token deltas from the host's streaming events.
-- Forwards one harness delta per native delta without batching.
-- Maps host completion/error events to harness `completed`/`failed`.
-- Decodes server `userTurn` messages and starts the next native turn.
-- Carries sequence numbers and generation IDs.
-
-OpenCode exposes `message.part.delta` events; Pi exposes `message_update` with `assistantMessageEvent.text_delta`; Codex App Server exposes `item/agentMessage/delta`. The first complete vertical slice targets OpenCode. The adapter is the only required TypeScript package.
+No input is token-streamed back. Full tree + event is one message to the adapter.
 
 ## Telomere
 
-Telomere is the incremental JSON completion layer. It receives streamed text and answers: given the prefix so far, can this be closed into valid JSON now? It is mandatory in the streaming path and is Ribosome's competitive advantage over other generative-UI frameworks.
+The mandatory streaming invariant. All deltas pass through it.
 
 ```ocaml
 type processor_state
@@ -190,12 +203,22 @@ val create_processor : unit -> processor_state
 val feed : processor_state -> string -> output * processor_state
 ```
 
-`Pending` means the stream is mid-token. `Completion suffix` means `buffer ^ suffix` is valid JSON ready to decode. `Corrupted` permanently stops candidate commits for that processor. State is immutable; callers thread the returned state forward.
+`Pending` = mid-token, waiting. `Completion suffix` = `buffer ^ suffix` is valid JSON. `Corrupted` = unrecoverable, no further commits. State is immutable; callers thread the returned state.
+
+## Harness Adapter (OpenCode)
+
+The adapter is at `adapters/opencode/`. It:
+- Correlates MCP `start` with native harness sessions via nonce injection
+- Forwards one harness delta per native `message.part.delta` event (no batching)
+- Maps OpenCode completion/error to `completed`/`failed`
+- Decodes `userTurn` and starts the next native turn via plugin hooks
+- Manages sessions with reconnect, debounced submission, and structured logging
+
+For adding a **new adapter** (e.g., Codex, Pi), see [PROTOCOL.md](./PROTOCOL.md).
 
 ## Future Work
 
-- Additional modes (`code`, `explore`) with distinct skill bundles.
-- Broader MCP operations beyond `start`.
-- Additional harness adapters (Codex, Pi).
-- Native, web, and TUI UI clients built against the versioned UI protocol.
-- Optional streaming submission for large trees if a future harness supports it.
+- Additional modes (`code`, `explore`) with distinct skill bundles
+- Broader MCP operations beyond `start`
+- Additional harness adapters (Codex, Pi)
+- Native/web/TUI clients against the versioned UI protocol

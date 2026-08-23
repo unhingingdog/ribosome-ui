@@ -57,3 +57,29 @@
  (modules exec_smoke_test)
  (libraries ribosome_server_lib alcotest alcotest-lwt lwt)
  (package ribosome-server))
+
+(test
+ (name ui_client_test)
+ (modules ui_client_test ui_client vslice_support)
+ (libraries ribosome_server_lib alcotest yojson)
+ (package ribosome-server))
+
+(test
+ (name vslice_kickoff_test)
+ (modules vslice_kickoff_test vslice_support)
+ (libraries ribosome_server_lib alcotest yojson)
+ (package ribosome-server))
+
+(test
+ (name vslice_two_turn_test)
+ (modules vslice_two_turn_test)
+ (libraries ribosome_server_lib alcotest yojson)
+ (package ribosome-server))
+
+(test
+ (name contract_fixtures_test)
+ (modules contract_fixtures_test)
+ (libraries ribosome_server_lib alcotest yojson)
+ (package ribosome-server)
+ (deps
+  (source_tree protocol-fixtures)))

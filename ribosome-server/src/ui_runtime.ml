@@ -46,6 +46,8 @@ let register_session t ~session_id =
 let put_session t ~session_id session =
   Hashtbl.replace t.sessions session_id session
 
+let get_session t ~session_id = Hashtbl.find_opt t.sessions session_id
+
 let handle_attach t ~session_id ~revision =
   match Session_registry.find t.registry session_id with
   | None -> Error InvalidSession
