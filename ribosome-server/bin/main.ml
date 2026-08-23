@@ -4,6 +4,8 @@
    runtime. Cmdliner options control interface, port, public UI URL, and
    skill root. *)
 
+module Debug = Ribosome_server_lib.Debug
+
 let read_file path =
   try
     let ic = open_in path in
@@ -44,39 +46,23 @@ let make_runtimes config =
     {
       Ribosome_server_lib.Harness_runtime.broadcast_template_update =
         (fun ~session_id ~revision ~tree:_ ->
-          let () =
-            Printf.eprintf "[harness] update session=%s rev=%d\n" session_id
-              revision
-          in
-          flush stderr);
+          Debug.log "harness_broadcast" (Printf.sprintf "template_update session=%s rev=%d" session_id revision));
     }
   in
   let u_broadcast =
     {
       Ribosome_server_lib.Ui_runtime.broadcast_template_update =
         (fun ~session_id ~revision ~tree:_ ->
-          let () =
-            Printf.eprintf "[ui] update session=%s rev=%d\n" session_id revision
-          in
-          flush stderr);
+          Debug.log "ui_broadcast" (Printf.sprintf "template_update session=%s rev=%d" session_id revision));
       broadcast_session_state =
         (fun ~session_id ~mode ~revision ~tree:_ ~generation_id:_ ->
-          let () =
-            Printf.eprintf "[ui] snapshot session=%s mode=%s rev=%d\n"
-              session_id mode revision
-          in
-          flush stderr);
+          Debug.log "ui_broadcast" (Printf.sprintf "session_state session=%s mode=%s rev=%d" session_id mode revision));
       broadcast_event_rejection =
         (fun ~session_id ~event_id ~reason:_ ->
-          let () =
-            Printf.eprintf "[ui] reject session=%s event=%s\n" session_id
-              event_id
-          in
-          flush stderr);
+          Debug.log "ui_broadcast" (Printf.sprintf "event_rejection session=%s event=%s" session_id event_id));
       send_user_turn =
         (fun ~session_id ~tree:_ ~event:_ ->
-          let () = Printf.eprintf "[ui] user_turn session=%s\n" session_id in
-          flush stderr);
+          Debug.log "ui_broadcast" (Printf.sprintf "user_turn session=%s" session_id));
     }
   in
   let harness =
@@ -112,6 +98,7 @@ let () =
     Arg.(value & flag & info [ "stdio" ] ~doc:"Enable MCP stdio processing")
   in
   let compose interface_ port _public_ui_url skill_root stdio =
+    Debug.log "main" (Printf.sprintf "starting interface=%s port=%d stdio=%b" interface_ port stdio);
     let config = make_config ~skill_root in
     let ws_runtime = make_runtimes config in
     let combined =

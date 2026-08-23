@@ -31,3 +31,4 @@ val register_session : t -> session_id:string -> unit
 val put_session : t -> session_id:string -> Ribosome.Session.t -> unit
 val get_session : t -> session_id:string -> Ribosome.Session.t option
 val handle_message : t -> Ui_protocol.message -> (unit, error) result
+val error_string : error -> string

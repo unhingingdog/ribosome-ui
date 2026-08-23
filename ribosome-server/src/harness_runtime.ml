@@ -43,21 +43,30 @@ let put_session t ~session_id session =
 let get_session t ~session_id = Hashtbl.find_opt t.sessions session_id
 
 let handle_attach t ~session_id ~harness_session_id ~nonce =
+  Debug.log "harness" (Printf.sprintf "attach session=%s harness=%s" session_id harness_session_id);
   match Session_registry.find t.registry session_id with
   | None -> Error InvalidSession
   | Some entry ->
-      if entry.Session_registry.harness_nonce <> nonce then Error InvalidSession
+      if entry.Session_registry.harness_nonce <> nonce then begin
+        Debug.log "harness" (Printf.sprintf "attach REJECT nonce mismatch session=%s" session_id);
+        Error InvalidSession
+      end
       else if entry.Session_registry.harness_session_id <> harness_session_id
-      then Error InvalidSession
+      then begin
+        Debug.log "harness" (Printf.sprintf "attach REJECT harness_id mismatch session=%s" session_id);
+        Error InvalidSession
+      end
       else
         let _ =
           Session_registry.attach_harness t.registry session_id
             ~conn_id:session_id
         in
+        Debug.log "harness" (Printf.sprintf "attach OK session=%s" session_id);
         Ok ()
 
 let handle_delta t ~session_id ~generation_id ~seq ~content :
     (delta_result, error) result =
+  Debug.log "harness" (Printf.sprintf "delta session=%s gen=%s seq=%d len=%d" session_id generation_id seq (String.length content));
   match Hashtbl.find_opt t.sessions session_id with
   | None -> Error InvalidSession
   | Some session -> (
@@ -77,6 +86,7 @@ let handle_delta t ~session_id ~generation_id ~seq ~content :
       with
       | Ok (session, Ribosome.Incremental.Updated tree) ->
           Hashtbl.replace t.sessions session_id session;
+          Debug.log "harness" (Printf.sprintf "delta updated session=%s rev=%d" session_id session.Ribosome.Session.revision);
           t.broadcast.broadcast_template_update ~session_id
             ~revision:session.Ribosome.Session.revision
             ~tree:(Yojson.Safe.to_string (Ribosome.Template.encode tree));
@@ -89,11 +99,15 @@ let handle_delta t ~session_id ~generation_id ~seq ~content :
           Ok Pending
       | Ok (session, Ribosome.Incremental.Corrupted) ->
           Hashtbl.replace t.sessions session_id session;
+          Debug.log "harness" (Printf.sprintf "delta corrupted session=%s" session_id);
           Ok Corrupted
-      | Error e -> Error (InvalidSequence e))
+      | Error e ->
+          Debug.log "harness" (Printf.sprintf "delta error session=%s: %s" session_id e);
+          Error (InvalidSequence e))
 
 let handle_generation_completed t ~session_id ~generation_id :
     (unit, error) result =
+  Debug.log "harness" (Printf.sprintf "generation_completed session=%s gen=%s" session_id generation_id);
   match Hashtbl.find_opt t.sessions session_id with
   | None -> Error InvalidSession
   | Some session -> (
@@ -107,6 +121,7 @@ let handle_generation_completed t ~session_id ~generation_id :
 
 let handle_generation_failed t ~session_id ~generation_id : (unit, error) result
     =
+  Debug.log "harness" (Printf.sprintf "generation_failed session=%s gen=%s" session_id generation_id);
   match Hashtbl.find_opt t.sessions session_id with
   | None -> Error InvalidSession
   | Some session -> (

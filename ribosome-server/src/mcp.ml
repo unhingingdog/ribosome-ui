@@ -65,6 +65,7 @@ let raw_json_suffix = "\n\nYour next response must be raw template JSON only."
 
 let handle_start (config : config) (params : Yojson.Safe.t option) :
     (Yojson.Safe.t, string) result =
+  Debug.log "mcp" "tools/call start";
   let* params =
     match params with
     | Some (`Assoc _) as p -> Ok p
@@ -109,6 +110,7 @@ let handle_start (config : config) (params : Yojson.Safe.t option) :
   match result with
   | Error `Duplicate -> Error "duplicate harness session"
   | Ok entry ->
+      Debug.log "mcp" (Printf.sprintf "start OK session_id=%s mode=%s" entry.Session_registry.session_id entry.Session_registry.mode);
       let content =
         `List
           [
@@ -131,6 +133,12 @@ let handle_start (config : config) (params : Yojson.Safe.t option) :
 
 let handle (config : config) (state : state) (msg : Jsonrpc.message) :
     state * Jsonrpc.message option =
+  let method_ = match msg with
+    | Jsonrpc.Request r -> r.method_
+    | Jsonrpc.Notification n -> n.method_
+    | _ -> "<response>"
+  in
+  Debug.log "mcp" (Printf.sprintf "handle state=%s method=%s" (match state with Uninitialized -> "uninit" | Initialized -> "init") method_);
   match state with
   | Uninitialized -> (
       match msg with

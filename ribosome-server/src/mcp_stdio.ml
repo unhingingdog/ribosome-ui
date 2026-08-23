@@ -24,10 +24,11 @@ let read_lines ic f =
 let process_stdin ~config =
   let state = ref Mcp.Uninitialized in
   let oc = stdout in
+  Debug.log "stdio" "starting stdin loop";
   read_lines stdin (fun line ->
       match Jsonrpc.decode_line line with
       | Error e ->
-          (* Malformed input: send parse error, don't crash *)
+          Debug.log "stdio" (Printf.sprintf "decode error: %s" e);
           let err =
             Jsonrpc.encode_to_line
               (Jsonrpc.make_error_response (Int_id 0) Jsonrpc.Parse_error e)

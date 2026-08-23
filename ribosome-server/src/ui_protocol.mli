@@ -51,3 +51,5 @@ type message =
 
 val encode_message : message -> Yojson.Safe.t
 val decode_message : Yojson.Safe.t -> (message, string) result
+val component_kind_to_string : component_kind -> string
+val rejection_reason_to_string : event_rejection_reason -> string
