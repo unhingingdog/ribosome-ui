@@ -2,9 +2,9 @@
  (name telomere)
  (public_name telomere)
  (synopsis "Incremental JSON completion for streamed LLM output")
-  (private_modules
-   debug
-   balancer
+ (private_modules
+  debug
+  balancer
   balancer_types
   lexer
   lexer_brace

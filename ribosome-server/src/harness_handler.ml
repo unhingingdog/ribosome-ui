@@ -13,11 +13,13 @@ let handle_websocket ~runtime websocket =
     let* msg = Dream.receive websocket in
     match msg with
     | None -> begin
-      Debug.log "harness_ws" "connection closed (EOF)";
-      Lwt.return_unit
-    end
+        Debug.log "harness_ws" "connection closed (EOF)";
+        Lwt.return_unit
+      end
     | Some data when String.length data > max_message_size ->
-        Debug.log "harness_ws" (Printf.sprintf "closing: message too large (%d bytes)" (String.length data));
+        Debug.log "harness_ws"
+          (Printf.sprintf "closing: message too large (%d bytes)"
+             (String.length data));
         let* () = Dream.close_websocket websocket in
         Lwt.return_unit
     | Some data -> (
@@ -25,11 +27,13 @@ let handle_websocket ~runtime websocket =
         | json -> (
             match Harness_protocol.decode_message json with
             | Ok harness_msg -> (
-                Debug.log "harness_ws" (Printf.sprintf "decoded msg len=%d" (String.length data));
+                Debug.log "harness_ws"
+                  (Printf.sprintf "decoded msg len=%d" (String.length data));
                 match Harness_runtime.handle_message runtime harness_msg with
                 | Ok _ -> loop ()
                 | Error _ ->
-                    Debug.log "harness_ws" "runtime rejection sent, keeping socket open";
+                    Debug.log "harness_ws"
+                      "runtime rejection sent, keeping socket open";
                     let rejection_json =
                       `Assoc
                         [
@@ -44,11 +48,13 @@ let handle_websocket ~runtime websocket =
                     in
                     loop ())
             | Error e ->
-                Debug.log "harness_ws" (Printf.sprintf "decode error, closing: %s" e);
+                Debug.log "harness_ws"
+                  (Printf.sprintf "decode error, closing: %s" e);
                 let* () = Dream.close_websocket websocket in
                 Lwt.return_unit)
         | exception Yojson.Json_error msg ->
-            Debug.log "harness_ws" (Printf.sprintf "json parse error, closing: %s" msg);
+            Debug.log "harness_ws"
+              (Printf.sprintf "json parse error, closing: %s" msg);
             let* () = Dream.close_websocket websocket in
             Lwt.return_unit)
   in

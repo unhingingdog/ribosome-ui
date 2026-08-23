@@ -4,6 +4,6 @@
  (synopsis
   "Typed template ADT, codec, validation, and reconciliation for generative UI")
  (libraries telomere yojson)
-  (private_modules debug codec_decode codec_encode codec_error)
+ (private_modules debug codec_decode codec_encode codec_error)
  (flags
   (:standard -w +A-4-40-41-42-44-50-70)))

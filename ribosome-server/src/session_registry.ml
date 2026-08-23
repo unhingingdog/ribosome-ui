@@ -35,13 +35,15 @@ let find_by_harness registry harness_session_id =
 
 let start ?(mode = "ui") ~(id_gen : id_gen) ~(registry : t)
     ~(harness_session_id : string) ~(harness_nonce : string) () =
-  Debug.log "registry" (Printf.sprintf "start harness_session=%s" harness_session_id);
+  Debug.log "registry"
+    (Printf.sprintf "start harness_session=%s" harness_session_id);
   match find_by_harness registry harness_session_id with
   | Some _ -> Error `Duplicate
   | None ->
       let session_id = id_gen.gen_session_id () in
       let ui_nonce = id_gen.gen_ui_nonce () in
-      Debug.log "registry" (Printf.sprintf "start OK session_id=%s ui_nonce=%s" session_id ui_nonce);
+      Debug.log "registry"
+        (Printf.sprintf "start OK session_id=%s ui_nonce=%s" session_id ui_nonce);
       let entry =
         {
           session_id;
@@ -78,7 +80,10 @@ let attach_ui registry session_id ~conn_id ~revision =
   | None -> Error `NotFound
   | Some entry ->
       entry.ui_connections <- { conn_id; revision } :: entry.ui_connections;
-      Debug.log "registry" (Printf.sprintf "attach_ui session=%s conn=%s rev=%d total_ui=%d" session_id conn_id revision (Stdlib.List.length entry.ui_connections));
+      Debug.log "registry"
+        (Printf.sprintf "attach_ui session=%s conn=%s rev=%d total_ui=%d"
+           session_id conn_id revision
+           (Stdlib.List.length entry.ui_connections));
       Ok ()
 
 let detach_ui registry session_id ~conn_id =
@@ -96,7 +101,8 @@ let attach_harness registry session_id ~conn_id =
   | None -> Error `NotFound
   | Some entry ->
       entry.harness_connection <- Some ({ conn_id } : harness_conn);
-      Debug.log "registry" (Printf.sprintf "attach_harness session=%s conn=%s" session_id conn_id);
+      Debug.log "registry"
+        (Printf.sprintf "attach_harness session=%s conn=%s" session_id conn_id);
       Ok ()
 
 let detach_harness registry session_id =

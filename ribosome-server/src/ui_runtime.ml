@@ -55,14 +55,17 @@ let put_session t ~session_id session =
 let get_session t ~session_id = Hashtbl.find_opt t.sessions session_id
 
 let handle_attach t ~session_id ~revision =
-  Debug.log "ui" (Printf.sprintf "attach session=%s revision=%s" session_id (match revision with Some r -> string_of_int r | None -> "none"));
+  Debug.log "ui"
+    (Printf.sprintf "attach session=%s revision=%s" session_id
+       (match revision with Some r -> string_of_int r | None -> "none"));
   (match Session_registry.find t.registry session_id with
-   | None ->
-       Debug.log "ui" (Printf.sprintf "creating session %s (UI-initiated)" session_id);
-       Session_registry.start_ui ~registry:t.registry ~session_id;
-       register_session t ~session_id
-   | Some _ -> ());
-   match Session_registry.find t.registry session_id with
+  | None ->
+      Debug.log "ui"
+        (Printf.sprintf "creating session %s (UI-initiated)" session_id);
+      Session_registry.start_ui ~registry:t.registry ~session_id;
+      register_session t ~session_id
+  | Some _ -> ());
+  match Session_registry.find t.registry session_id with
   | None -> Error InvalidSession
   | Some entry -> (
       (* UI nonce check would happen here once nonces are passed in *)
@@ -84,7 +87,11 @@ let handle_attach t ~session_id ~revision =
             | Some gen -> Some gen.Ribosome.Session.id
             | None -> None
           in
-          Debug.log "ui" (Printf.sprintf "attach OK session=%s rev=%d tree=%s gen=%s" session_id session.Ribosome.Session.revision (if tree_str <> None then "yes" else "no") (match gen_id with Some g -> g | None -> "none"));
+          Debug.log "ui"
+            (Printf.sprintf "attach OK session=%s rev=%d tree=%s gen=%s"
+               session_id session.Ribosome.Session.revision
+               (if tree_str <> None then "yes" else "no")
+               (match gen_id with Some g -> g | None -> "none"));
           t.broadcast.broadcast_session_state ~session_id
             ~mode:entry.Session_registry.mode
             ~revision:session.Ribosome.Session.revision ~tree:tree_str
@@ -111,7 +118,12 @@ let build_event ~kind ~target_id ~value : (Ribosome.Event.event, error) result =
 
 let handle_component_event t ~session_id ~revision ~event_id ~target_id ~kind
     ~value =
-  Debug.log "ui" (Printf.sprintf "component_event session=%s target=%s kind=%s event_id=%s rev=%d" session_id target_id (Ui_protocol.component_kind_to_string kind) event_id revision);
+  Debug.log "ui"
+    (Printf.sprintf
+       "component_event session=%s target=%s kind=%s event_id=%s rev=%d"
+       session_id target_id
+       (Ui_protocol.component_kind_to_string kind)
+       event_id revision);
   match Hashtbl.find_opt t.sessions session_id with
   | None -> Error InvalidSession
   | Some session -> (
@@ -124,7 +136,9 @@ let handle_component_event t ~session_id ~revision ~event_id ~target_id ~kind
           with
           | Ok (Ribosome.Session.Updated new_session) ->
               Hashtbl.replace t.sessions session_id new_session;
-              Debug.log "ui" (Printf.sprintf "event updated (change) session=%s new_rev=%d" session_id new_session.Ribosome.Session.revision);
+              Debug.log "ui"
+                (Printf.sprintf "event updated (change) session=%s new_rev=%d"
+                   session_id new_session.Ribosome.Session.revision);
               let tree_str =
                 match new_session.Ribosome.Session.tree with
                 | Some tree ->
@@ -136,7 +150,9 @@ let handle_component_event t ~session_id ~revision ~event_id ~target_id ~kind
               Ok `Updated
           | Ok (Ribosome.Session.UserTurn (new_session, tree, event)) ->
               Hashtbl.replace t.sessions session_id new_session;
-              Debug.log "ui" (Printf.sprintf "event user_turn session=%s new_rev=%d" session_id new_session.Ribosome.Session.revision);
+              Debug.log "ui"
+                (Printf.sprintf "event user_turn session=%s new_rev=%d"
+                   session_id new_session.Ribosome.Session.revision);
               let tree_str =
                 Yojson.Safe.to_string (Ribosome.Template.encode tree)
               in
@@ -156,7 +172,12 @@ let handle_component_event t ~session_id ~revision ~event_id ~target_id ~kind
                 then Ui_protocol.StaleRevision
                 else Ui_protocol.DuplicateEventId
               in
-              Debug.log "ui" (Printf.sprintf "event rejected session=%s event_id=%s raw_error=%s reason=%s" session_id event_id e (Ui_protocol.rejection_reason_to_string reason));
+              Debug.log "ui"
+                (Printf.sprintf
+                   "event rejected session=%s event_id=%s raw_error=%s \
+                    reason=%s"
+                   session_id event_id e
+                   (Ui_protocol.rejection_reason_to_string reason));
               t.broadcast.broadcast_event_rejection ~session_id ~event_id
                 ~reason;
               Error (EventError e)))

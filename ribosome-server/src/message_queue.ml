@@ -5,9 +5,9 @@ let push session_id msg =
     match Hashtbl.find_opt queues session_id with
     | Some q -> q
     | None ->
-      let q = Queue.create () in
-      Hashtbl.add queues session_id q;
-      q
+        let q = Queue.create () in
+        Hashtbl.add queues session_id q;
+        q
   in
   Queue.push msg q
 

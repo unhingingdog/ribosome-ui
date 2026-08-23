@@ -96,10 +96,14 @@ let test_attach_sends_snapshot () =
 let test_attach_creates_session () =
   reset ();
   let runtime = make_runtime_with_tree () in
-  let msg = Ui_protocol.Attach { session_id = "new-session"; revision = None } in
+  let msg =
+    Ui_protocol.Attach { session_id = "new-session"; revision = None }
+  in
   match Ui_runtime.handle_message runtime msg with
   | Ok () -> ()
-  | Error e -> Alcotest.fail ("expected Ok for new session, got " ^ Ui_runtime.error_string e)
+  | Error e ->
+      Alcotest.fail
+        ("expected Ok for new session, got " ^ Ui_runtime.error_string e)
 
 let test_change_broadcasts_update () =
   reset ();
@@ -252,7 +256,8 @@ let () =
         [
           Alcotest.test_case "attach sends snapshot" `Quick
             test_attach_sends_snapshot;
-          Alcotest.test_case "attach creates session" `Quick test_attach_creates_session;
+          Alcotest.test_case "attach creates session" `Quick
+            test_attach_creates_session;
         ] );
       ( "events",
         [

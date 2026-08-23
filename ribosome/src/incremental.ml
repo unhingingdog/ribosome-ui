@@ -26,7 +26,9 @@ let decode_candidate buffer suffix =
 
 let feed state delta =
   let new_buffer = state.buffer ^ delta in
-  Debug.log "incremental" (Printf.sprintf "feed delta_len=%d buffer_len=%d" (String.length delta) (String.length new_buffer));
+  Debug.log "incremental"
+    (Printf.sprintf "feed delta_len=%d buffer_len=%d" (String.length delta)
+       (String.length new_buffer));
   let output, new_processor = Telomere.Processor.feed state.processor delta in
   match output with
   | Telomere.Processor.Corrupted ->
@@ -35,10 +37,12 @@ let feed state delta =
   | Telomere.Processor.Pending ->
       ({ state with processor = new_processor; buffer = new_buffer }, Pending)
   | Telomere.Processor.Completion suffix -> (
-      Debug.log "incremental" (Printf.sprintf "completion suffix_len=%d" (String.length suffix));
+      Debug.log "incremental"
+        (Printf.sprintf "completion suffix_len=%d" (String.length suffix));
       match decode_candidate new_buffer suffix with
       | Ok candidate -> (
-          Debug.log "incremental" (Printf.sprintf "decoded id=%s" (Template.id candidate));
+          Debug.log "incremental"
+            (Printf.sprintf "decoded id=%s" (Template.id candidate));
           match state.committed with
           | Some committed -> (
               match
@@ -54,7 +58,8 @@ let feed state delta =
                         buffer = new_buffer;
                       },
                       Pending )
-                  end else begin
+                  end
+                  else begin
                     Debug.log "incremental" "reconcile updated";
                     ( {
                         processor = new_processor;
@@ -64,7 +69,8 @@ let feed state delta =
                       Updated reconciled )
                   end
               | Error e ->
-                  Debug.log "incremental" (Printf.sprintf "reconcile rejected: %s" e);
+                  Debug.log "incremental"
+                    (Printf.sprintf "reconcile rejected: %s" e);
                   ( { state with processor = new_processor; buffer = new_buffer },
                     Rejected e ))
           | None ->
