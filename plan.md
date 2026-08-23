@@ -641,3 +641,241 @@ Open questions:
   reads?
 - Should changes also be queryable, or remain fire-and-forget on the UI side?
 - How does this interact with the queued-submission design in the adapter?
+
+---
+
+## Feature 10: Frontend Clients
+
+### Task 10.1: Monorepo scaffolding
+
+1. Add `frontends/` with pnpm workspace (`pnpm-workspace.yaml`, root `package.json`).
+2. Add three packages: `ui-core`, `web`, `tui`.
+3. Add `frontends/pnpm-lock.yaml`.
+4. Add `**/dist/` to `.gitignore`.
+
+**Acceptance**: `pnpm install` resolves all three packages.
+
+### Task 10.2: ui-core — types and codec
+
+1. Add `types/protocol.ts` (ServerMessage, ClientMessage, Attach, ComponentEvent, etc.).
+2. Add `types/template.ts` (all 13 template kinds, Tone, TextType, BadgeVariant, etc.).
+3. Add `types/components.ts` (ComponentProps, ComponentMap, EventCallback).
+4. Add `codec/decode.ts` (server message decoder with DecodeResult).
+5. Add `codec/encode.ts` (client message encoder).
+6. Add `codec/template-decode.ts` (full template tree decoder with validation).
+
+**Acceptance**: all types compile, decoders return explicit errors (no exceptions).
+
+### Task 10.3: ui-core — transport, store, renderer
+
+1. Add `transport/websocket.ts` (UiTransport with reconnect, exponential backoff).
+2. Add `store/session-store.ts` (Solid createStore + reconcile({key:"id"})).
+3. Add `store/event-dispatch.ts` (sendComponentEvent, sendCancel, sendDisconnect).
+4. Add `components/template-renderer.tsx` (createRenderer, createBoundRenderer).
+5. Add `debug.ts` (RIBOSOME_DEBUG-gated logging).
+6. Add `index.ts` barrel.
+
+**Acceptance**: store applies session_state and template_update messages, reconcile diffs by ID.
+
+### Task 10.4: ui-core tests
+
+1. Add decode, encode, template-decode, session-store, contract-fixtures test files.
+2. 64 tests covering all decoders, store updates, reconcile behavior, error paths.
+
+**Acceptance**: `pnpm -r test` passes 64 tests.
+
+### Task 10.5: web client
+
+1. Add `web/src/components.tsx` — 13 Solid DOM components + ComponentMap.
+2. Add `web/src/app.tsx` — demo app with status bar, error toast, tree renderer.
+3. Add `web/src/main.tsx` — entry, reads session_id from URL param.
+4. Add `web/src/style.css` — layout, status, error styling.
+5. Add `vite.config.ts`, `index.html`, `tsconfig.json`, `package.json`.
+
+**Acceptance**: `pnpm --filter @ribosome/web build` produces dist/.
+
+### Task 10.6: tui client
+
+1. Add `tui/src/components.tsx` — 13 @opentui/solid terminal components + ComponentMap.
+2. Add `tui/src/app.tsx` — terminal demo app with bordered status bar.
+3. Add `tui/src/index.tsx` — entry, reads session_id from argv.
+4. Add `bunfig.toml` with `@opentui/solid/preload` for JSX transform.
+5. Add `tsconfig.json`, `package.json`.
+
+**Acceptance**: `bun --preload @opentui/solid/preload src/index.tsx rs-1` launches.
+
+### Task 10.7: CI and docs
+
+1. Add `frontends` CI job (pnpm install, typecheck, test, web build).
+2. Update README.md with frontend section, architecture diagram, package table.
+3. Update architecture.md with frontend architecture, renderer factory, reconcile.
+
+**Acceptance**: CI runs frontend job alongside existing OCaml jobs.
+
+### Task 10.8: demo.sh
+
+1. Add `demo.sh` with standalone and `SKIP_SERVER=1` modes.
+2. Sets `RIBOSOME_DEBUG=1`, logs to `.logs/`, cleanup trap.
+3. Prints web URL and TUI run command.
+
+**Acceptance**: `./demo.sh` starts server + web; `SKIP_SERVER=1 ./demo.sh` starts web only.
+
+---
+
+## Feature 11: UI-Initiated Generation
+
+The UI always initiates. The first screen is deterministic (input + submit), not agent-generated. Agent connection is lazy — fires only when the user submits a prompt.
+
+### Architecture
+
+```
+UI Client                     Server                      Harness Adapter
+   │                           │                              │
+   │── attach ────────────────►│ creates session              │
+   │◄─ session_state ─────────┤ (with home template tree)     │
+   │                           │                              │
+   │  user types subject       │                              │
+   │  user clicks submit       │                              │
+   │── component_event ───────►│ produces UserTurn            │
+   │                           │── start_generation ─────────►│ promptAsync(prompt)
+   │                           │◄─ attach ────────────────────┤ (harness attaches)
+   │                           │◄─ delta ─────────────────────┤ agent streams JSON
+   │◄─ template_update ───────┤                               │
+   │◄─ template_update ───────┤                               │
+   │  user interacts           │                              │
+   │── component_event ───────►│── user_turn ────────────────►│ inject into agent
+   │                           │◄─ delta ─────────────────────┤ next generation
+   │◄─ template_update ───────┤                               │
+```
+
+### Phase 1 — Step A: Home template, request_generation, /templates, frontend
+
+#### Task 11.1: Home template builder
+
+1. Add `ribosome-server/src/home_template.ml`/`.mli`.
+2. Define `home_json : string` — a template JSON string with a container, title text, subtitle, and a submittable with a text input and submit button.
+3. Define `templates_json : string` — a template JSON string with all 13 component kinds in a vertical container (storybook).
+4. Both are decoded via `Ribosome.Template.decode_string` to validate at load time.
+5. Export `home_tree : Ribosome.Template.t` and `templates_tree : Ribosome.Template.t`.
+
+**Acceptance**: both JSON strings decode and validate without errors.
+
+#### Task 11.2: Feed home template on session creation
+
+1. In `ui_runtime.ml`, after `start_ui` + `register_session`, feed the home template through the delta pipeline: `Session.start_generation ~gen_id:"home"` → `Session.feed_delta` → `Session.complete_generation`.
+2. The session now has `tree = Some home_tree`, `revision = 1`.
+3. `handle_attach` broadcasts `session_state` with the home tree.
+4. Reconnect (attach with existing tree) skips home template feeding.
+
+**Acceptance**: UI client receives session_state with a non-empty tree on first attach.
+
+#### Task 11.3: Add request_generation to UI protocol
+
+1. Add `request_generation` record to `ui_protocol.ml`: `{ session_id : session_id; prompt : string }`.
+2. Add `RequestGeneration` variant to `message`.
+3. Add encode/decode cases.
+4. Update `.mli`.
+
+**Acceptance**: request_generation round-trips through encode/decode.
+
+#### Task 11.4: Handle request_generation in ui_runtime
+
+1. Add `handle_request_generation` to `ui_runtime.ml`.
+2. For now: return `Ok ()` — the actual harness forwarding is Step B.
+3. Add `RequestGeneration` case to `handle_message`.
+
+**Acceptance**: server accepts request_generation without error.
+
+#### Task 11.5: Add /templates endpoint (debug mode only)
+
+1. In `main.ml`, add a `Dream.get "/templates"` route.
+2. Returns `templates_tree` JSON when `Debug.enabled` is true.
+3. Returns 404 when debug is disabled.
+4. Add the templates tree to the router.
+
+**Acceptance**: `curl localhost:8787/templates` returns JSON in debug mode, 404 otherwise.
+
+#### Task 11.6: Frontend — request_generation protocol support
+
+1. `types/protocol.ts`: add `RequestGeneration` to `ClientMessage`.
+2. `codec/encode.ts`: add `encodeRequestGeneration(sessionId, prompt)`.
+3. `store/event-dispatch.ts`: add `sendRequestGeneration(prompt)`.
+4. `web/src/app.tsx` + `tui/src/app.tsx`: when a submit action triggers, check if the tree is the home template (revision 1, no generation_id) — if so, send `request_generation` with the input value as prompt instead of `component_event`.
+
+**Acceptance**: submitting the home screen input sends a request_generation message.
+
+#### Task 11.7: Web app /templates route
+
+1. Add a client-side `/templates` route to the web app.
+2. Fetches JSON from `:8787/templates` (server) and renders it with the existing Solid components.
+3. Shows all 13 component kinds vertically.
+
+**Acceptance**: navigating to `/templates` in the web app renders the storybook.
+
+### Phase 1 — Step B: Harness bidirectional, adapter, live conversation
+
+#### Task 11.8: Add start_generation to harness protocol
+
+1. Add `start_generation` record to `harness_protocol.ml`: `{ session_id : session_id; prompt : string }`.
+2. Add `StartGeneration` variant to `message` (server→adapter).
+3. Add `start_generation_response`: `{ session_id : session_id; success : bool; reason : string option }` (adapter→server).
+4. Add `StartGenerationResponse` variant.
+5. Add encode/decode for both.
+6. Update `.mli`.
+
+**Acceptance**: start_generation and response round-trip through encode/decode.
+
+#### Task 11.9: Extend Message_queue for harness outbound
+
+1. Add a second hashtable to `message_queue.ml` for harness-bound messages.
+2. Add `push_harness session_id msg` and `drain_harness session_id`.
+3. Update `.mli`.
+
+**Acceptance**: harness queue operates independently from UI queue.
+
+#### Task 11.10: Harness handler — drain outbound queue
+
+1. In `harness_handler.ml`, add drain-before-receive using `Lwt.pick` with a 1s timeout (adapter won't send messages until it receives start_generation).
+2. Drain `Message_queue.drain_harness` and send to WebSocket.
+3. Also wire `send_user_turn` in `main.ml` to `Message_queue.push_harness` (fixes the existing no-op stub).
+
+**Acceptance**: messages pushed to harness queue are delivered to the adapter WebSocket.
+
+#### Task 11.11: Wire request_generation to harness forwarding
+
+1. In `ui_runtime.ml`, `handle_request_generation`: push `start_generation` JSON to harness queue via a new `broadcast` callback.
+2. Add `send_start_generation : session_id:string -> prompt:string -> unit` to `ui_broadcast`.
+3. In `main.ml`, wire it to `Message_queue.push_harness`.
+
+**Acceptance**: UI submit triggers start_generation message to harness adapter.
+
+#### Task 11.12: Adapter — proactive connect and late attach
+
+1. In `adapters/opencode/src/plugin.ts`, connect harness WS on plugin load (not waiting for start tool).
+2. On receiving `start_generation` from harness WS: send `attach` with session_id and `"pending"` nonce, then call `promptAsync(prompt)`.
+3. Keep existing start-tool flow as fallback.
+
+**Acceptance**: UI submit triggers agent generation without agent calling start tool first.
+
+#### Task 11.13: End-to-end demo
+
+1. Update `demo.sh` messaging for the new flow.
+2. Start server + web → UI shows home screen → type subject → submit → agent generates → UI renders.
+3. Test with `SKIP_SERVER=1` for OpenCode integration.
+
+**Acceptance**: full conversation flow works end-to-end from UI submit to agent response.
+
+### Phase 2 — Session listing (future)
+
+#### Task 11.14: Harness protocol — session list
+
+1. Add `SessionList` message (adapter→server): `{ sessions : [{ id : string; title : string; status : string }] }`.
+2. Adapter proactively sends on connect and whenever sessions change.
+
+#### Task 11.15: Server — cache session list, build home template dynamically
+
+1. `Harness_runtime` stores latest `SessionList`.
+2. Home template builder includes session buttons from cached list.
+3. `request_generation` with `provider_session_id` resumes existing conversation.
+
+**Acceptance**: home screen shows resumable conversations from the provider.
