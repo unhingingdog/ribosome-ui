@@ -5,6 +5,9 @@
    private library buildable and proves the dependency on [ribosome] links
    correctly. *)
 
+[@@@warning "-60"]
+module Debug = Debug
+[@@@warning "+60"]
 module Ui_protocol = Ui_protocol
 module Harness_protocol = Harness_protocol
 module Jsonrpc = Jsonrpc
