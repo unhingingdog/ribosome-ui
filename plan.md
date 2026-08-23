@@ -726,6 +726,8 @@ Open questions:
 
 The UI always initiates. The first screen is deterministic (input + submit), not agent-generated. Agent connection is lazy — fires only when the user submits a prompt.
 
+The home screen is a regular template with a submittable. The user types, clicks submit, and that produces a normal `component_event` (submit) → `user_turn`. There is no special "request_generation" message. The server-side logic (lazy harness connection, triggering agent generation) handles the first turn the same as any subsequent turn — the only difference is the harness isn't connected yet.
+
 ### Architecture
 
 ```
@@ -737,8 +739,9 @@ UI Client                     Server                      Harness Adapter
    │  user types subject       │                              │
    │  user clicks submit       │                              │
    │── component_event ───────►│ produces UserTurn            │
-   │                           │── start_generation ─────────►│ promptAsync(prompt)
-   │                           │◄─ attach ────────────────────┤ (harness attaches)
+   │                           │── user_turn ────────────────►│ (first turn: triggers
+   │                           │                              │  promptAsync + attach)
+   │                           │◄─ attach ────────────────────┤
    │                           │◄─ delta ─────────────────────┤ agent streams JSON
    │◄─ template_update ───────┤                               │
    │◄─ template_update ───────┤                               │
@@ -748,9 +751,9 @@ UI Client                     Server                      Harness Adapter
    │◄─ template_update ───────┤                               │
 ```
 
-### Phase 1 — Step A: Home template, request_generation, /templates, frontend
+### Phase 1 — Step A: Home template, /templates endpoint
 
-#### Task 11.1: Home template builder
+#### Task 11.1: Home template builder ✅
 
 1. Add `ribosome-server/src/home_template.ml`/`.mli`.
 2. Define `home_json : string` — a template JSON string with a container, title text, subtitle, and a submittable with a text input and submit button.
@@ -760,51 +763,23 @@ UI Client                     Server                      Harness Adapter
 
 **Acceptance**: both JSON strings decode and validate without errors.
 
-#### Task 11.2: Feed home template on session creation
+#### Task 11.2: Seed home template on session creation ✅
 
-1. In `ui_runtime.ml`, after `start_ui` + `register_session`, feed the home template through the delta pipeline: `Session.start_generation ~gen_id:"home"` → `Session.feed_delta` → `Session.complete_generation`.
-2. The session now has `tree = Some home_tree`, `revision = 1`.
-3. `handle_attach` broadcasts `session_state` with the home tree.
-4. Reconnect (attach with existing tree) skips home template feeding.
+1. In `ui_runtime.ml`, `register_session` sets `tree = Some Home_template.home_tree` and `revision = 1` directly (no Telomere/generation pipeline — JSON is validated at load).
+2. `handle_attach` broadcasts `session_state` with the home tree.
+3. Reconnect (attach with existing session) skips seeding.
 
 **Acceptance**: UI client receives session_state with a non-empty tree on first attach.
 
-#### Task 11.3: Add request_generation to UI protocol
-
-1. Add `request_generation` record to `ui_protocol.ml`: `{ session_id : session_id; prompt : string }`.
-2. Add `RequestGeneration` variant to `message`.
-3. Add encode/decode cases.
-4. Update `.mli`.
-
-**Acceptance**: request_generation round-trips through encode/decode.
-
-#### Task 11.4: Handle request_generation in ui_runtime
-
-1. Add `handle_request_generation` to `ui_runtime.ml`.
-2. For now: return `Ok ()` — the actual harness forwarding is Step B.
-3. Add `RequestGeneration` case to `handle_message`.
-
-**Acceptance**: server accepts request_generation without error.
-
-#### Task 11.5: Add /templates endpoint (debug mode only)
+#### Task 11.3: Add /templates endpoint (debug mode only) ✅
 
 1. In `main.ml`, add a `Dream.get "/templates"` route.
-2. Returns `templates_tree` JSON when `Debug.enabled` is true.
+2. Returns `templates_json` when `Debug.enabled` is true.
 3. Returns 404 when debug is disabled.
-4. Add the templates tree to the router.
 
 **Acceptance**: `curl localhost:8787/templates` returns JSON in debug mode, 404 otherwise.
 
-#### Task 11.6: Frontend — request_generation protocol support
-
-1. `types/protocol.ts`: add `RequestGeneration` to `ClientMessage`.
-2. `codec/encode.ts`: add `encodeRequestGeneration(sessionId, prompt)`.
-3. `store/event-dispatch.ts`: add `sendRequestGeneration(prompt)`.
-4. `web/src/app.tsx` + `tui/src/app.tsx`: when a submit action triggers, check if the tree is the home template (revision 1, no generation_id) — if so, send `request_generation` with the input value as prompt instead of `component_event`.
-
-**Acceptance**: submitting the home screen input sends a request_generation message.
-
-#### Task 11.7: Web app /templates route
+#### Task 11.4: Web app /templates route
 
 1. Add a client-side `/templates` route to the web app.
 2. Fetches JSON from `:8787/templates` (server) and renders it with the existing Solid components.
@@ -814,18 +789,7 @@ UI Client                     Server                      Harness Adapter
 
 ### Phase 1 — Step B: Harness bidirectional, adapter, live conversation
 
-#### Task 11.8: Add start_generation to harness protocol
-
-1. Add `start_generation` record to `harness_protocol.ml`: `{ session_id : session_id; prompt : string }`.
-2. Add `StartGeneration` variant to `message` (server→adapter).
-3. Add `start_generation_response`: `{ session_id : session_id; success : bool; reason : string option }` (adapter→server).
-4. Add `StartGenerationResponse` variant.
-5. Add encode/decode for both.
-6. Update `.mli`.
-
-**Acceptance**: start_generation and response round-trip through encode/decode.
-
-#### Task 11.9: Extend Message_queue for harness outbound
+#### Task 11.5: Extend Message_queue for harness outbound
 
 1. Add a second hashtable to `message_queue.ml` for harness-bound messages.
 2. Add `push_harness session_id msg` and `drain_harness session_id`.
@@ -833,31 +797,23 @@ UI Client                     Server                      Harness Adapter
 
 **Acceptance**: harness queue operates independently from UI queue.
 
-#### Task 11.10: Harness handler — drain outbound queue
+#### Task 11.6: Harness handler — drain outbound queue
 
-1. In `harness_handler.ml`, add drain-before-receive using `Lwt.pick` with a 1s timeout (adapter won't send messages until it receives start_generation).
+1. In `harness_handler.ml`, add drain-before-receive using `Lwt.pick` with a 1s timeout (adapter won't send messages until it receives a user_turn).
 2. Drain `Message_queue.drain_harness` and send to WebSocket.
 3. Also wire `send_user_turn` in `main.ml` to `Message_queue.push_harness` (fixes the existing no-op stub).
 
 **Acceptance**: messages pushed to harness queue are delivered to the adapter WebSocket.
 
-#### Task 11.11: Wire request_generation to harness forwarding
-
-1. In `ui_runtime.ml`, `handle_request_generation`: push `start_generation` JSON to harness queue via a new `broadcast` callback.
-2. Add `send_start_generation : session_id:string -> prompt:string -> unit` to `ui_broadcast`.
-3. In `main.ml`, wire it to `Message_queue.push_harness`.
-
-**Acceptance**: UI submit triggers start_generation message to harness adapter.
-
-#### Task 11.12: Adapter — proactive connect and late attach
+#### Task 11.7: Adapter — proactive connect and late attach
 
 1. In `adapters/opencode/src/plugin.ts`, connect harness WS on plugin load (not waiting for start tool).
-2. On receiving `start_generation` from harness WS: send `attach` with session_id and `"pending"` nonce, then call `promptAsync(prompt)`.
+2. On receiving `user_turn` from harness WS: send `attach` with session_id and `"pending"` nonce, then call `promptAsync` with the user turn content.
 3. Keep existing start-tool flow as fallback.
 
 **Acceptance**: UI submit triggers agent generation without agent calling start tool first.
 
-#### Task 11.13: End-to-end demo
+#### Task 11.8: End-to-end demo
 
 1. Update `demo.sh` messaging for the new flow.
 2. Start server + web → UI shows home screen → type subject → submit → agent generates → UI renders.
@@ -867,15 +823,15 @@ UI Client                     Server                      Harness Adapter
 
 ### Phase 2 — Session listing (future)
 
-#### Task 11.14: Harness protocol — session list
+#### Task 11.9: Harness protocol — session list
 
 1. Add `SessionList` message (adapter→server): `{ sessions : [{ id : string; title : string; status : string }] }`.
 2. Adapter proactively sends on connect and whenever sessions change.
 
-#### Task 11.15: Server — cache session list, build home template dynamically
+#### Task 11.10: Server — cache session list, build home template dynamically
 
 1. `Harness_runtime` stores latest `SessionList`.
 2. Home template builder includes session buttons from cached list.
-3. `request_generation` with `provider_session_id` resumes existing conversation.
+3. `user_turn` from a session button resumes an existing conversation.
 
 **Acceptance**: home screen shows resumable conversations from the provider.
