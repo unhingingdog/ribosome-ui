@@ -36,7 +36,7 @@ if [ "$SKIP_SERVER" = "1" ]; then
   echo "═══════════════════════════════════════════════════════════"
   echo "  Ribosome UI Demo  (OpenCode mode — server spawned by OpenCode)"
   echo "═══════════════════════════════════════════════════════════"
-  STEPS=2
+  STEPS=3
 else
   echo "═══════════════════════════════════════════════════════════"
   echo "  Ribosome UI Demo  (standalone mode — no harness)"
@@ -92,8 +92,9 @@ echo "  ✓ web client → http://localhost:5173?session_id=$SESSION_ID"
 # ── Summary ──────────────────────────────────────────────────
 echo ""
 echo "═══════════════════════════════════════════════════════════"
-echo "  Web:     http://localhost:5173?session_id=$SESSION_ID"
-echo "  Logs:    $LOG_DIR/{server,web,tui}.log"
+echo "  Web:         http://localhost:5173?session_id=$SESSION_ID"
+echo "  Storybook:   http://localhost:5173/templates"
+echo "  Logs:        $LOG_DIR/{server,web,tui}.log"
 echo ""
 if [ "$SKIP_SERVER" = "1" ]; then
   echo "  Server is NOT running — OpenCode will spawn it."
@@ -111,13 +112,13 @@ if [ "$SKIP_SERVER" = "1" ]; then
   echo '    "ribosome": ["@ribosome/opencode-adapter"]'
   echo '  }'
   echo ""
-  echo "  Then start OpenCode. Once the assistant calls 'start',"
-  echo "  the UIs will receive template deltas."
+  echo "  Then start OpenCode. The web UI shows the home screen."
+  echo "  Type a subject and submit — that triggers the agent."
 else
   echo "  TUI:  cd frontends/packages/tui && RIBOSOME_DEBUG=1 bun --preload @opentui/solid/preload src/index.tsx $SESSION_ID"
   echo ""
-  echo "  Server is running standalone (no harness attached). UIs"
-  echo "  will show 'Waiting for session…' until a harness connects."
+  echo "  Server is running standalone (no harness attached)."
+  echo "  The web UI shows the home screen with an input field."
   echo "  To use with OpenCode: SKIP_SERVER=1 ./demo.sh"
 fi
 if [ "$DEBUG" = "1" ]; then
