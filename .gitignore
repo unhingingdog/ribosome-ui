@@ -4,6 +4,7 @@ _opam/
 
 # Node
 **/node_modules/
+**/dist/
 
 # agent files
 plan-steps.md

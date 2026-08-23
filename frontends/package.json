@@ -1,0 +1,16 @@
+{
+  "name": "@ribosome/frontends",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:web": "pnpm --filter @ribosome/web dev",
+    "dev:tui": "pnpm --filter @ribosome/tui dev",
+    "build:web": "pnpm --filter @ribosome/web build",
+    "build:tui": "pnpm --filter @ribosome/tui build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}
