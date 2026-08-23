@@ -52,8 +52,34 @@ telomere ──► ribosome ──► ribosome-server
 | `ribosome` | Template ADT, codec, validation, reconciliation, session, modes | `telomere`, `yojson` |
 | `ribosome-server` | MCP, harness/UI protocols, Dream WebSocket, registry, runtimes | `ribosome`, `yojson`, `lwt`, `dream`, `cmdliner` |
 | `adapters/opencode` | Thin TypeScript harness adapter | `@opencode-ai/plugin`, vitest |
+| `frontends/ui-core` | Shared types, protocol codec, WebSocket transport, Solid store, renderer factory | `solid-js`, vitest |
+| `frontends/web` | Solid → DOM renderer, Vite dev/build | `@ribosome/ui-core`, `solid-js`, `vite` |
+| `frontends/tui` | @opentui/solid → terminal renderer, Bun runtime | `@ribosome/ui-core`, `@opentui/solid`, `@opentui/core` |
 
 All three OCaml packages have warnings-as-errors enabled. Codec helpers (`Codec_decode`, `Codec_encode`, `Codec_error`) are private modules in `ribosome` — accessible only through `Template.CodecError`/`Decode`/`Encode` aliases.
+
+## Frontend architecture
+
+```
+  WebSocket /v1/ui
+      │
+      ▼
+  ui-core codec           ui-core codec
+  (decode server msg)     (encode client msg)
+      │                        ▲
+      ▼                        │
+  createStore +               sendComponentEvent
+  reconcile(key:"id")        sendCancel / sendDisconnect
+      │                        ▲
+      ▼                        │
+  createBoundRenderer         event dispatch
+  (dispatch by kind)          (monotonic event_id)
+      │
+      ├─► web:  solid-js/web    ←── onClick/onChange/onSubmit
+      └─► tui:  @opentui/solid  ←── keyboard input → on:Select
+```
+
+`ui-core` ships as TypeScript source — each consumer's bundler compiles JSX with the target-specific Solid runtime (`solid-js/web` for DOM, `@opentui/solid/jsx-runtime` for terminal). The renderer factory injects per-target components; shared dispatch logic walks the tree by `kind` and delegates. `reconcile({ key: "id" })` diffs incoming tree revisions by stable ID, triggering reactivity only for changed nodes.
 
 ## Planes
 

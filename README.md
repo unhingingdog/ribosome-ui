@@ -33,8 +33,11 @@ opam exec -- ribosome-server
 
 ```
 telomere ──► ribosome ──► ribosome-server
-                │
-         adapters/opencode (TypeScript)
+                 │                    │
+          adapters/opencode     frontends/packages
+          (TypeScript)          ├── ui-core (shared)
+                               ├── web (Solid → DOM)
+                               └── tui (@opentui/solid → terminal)
 ```
 
 | Package | Tests | Purpose |
@@ -43,6 +46,9 @@ telomere ──► ribosome ──► ribosome-server
 | `ribosome` | 93 | Template ADT, validation, reconciliation, session |
 | `ribosome-server` | 7 + integration | MCP, harness stream, UI WebSocket transport |
 | `adapters/opencode` | 80 | Thin TypeScript harness adapter |
+| `frontends/ui-core` | 64 | Shared types, codec, transport, Solid store, renderer |
+| `frontends/web` | — | Solid → DOM renderer + demo app |
+| `frontends/tui` | — | @opentui/solid → terminal renderer + demo app |
 
 ## Build
 
@@ -62,6 +68,18 @@ npx vitest run
 ```
 
 <!-- TODO: adapter usage, config, MCP setup -->
+
+## Frontends
+
+```bash
+cd frontends
+pnpm install
+pnpm -r typecheck
+pnpm -r test
+pnpm dev:web          # Vite dev server
+pnpm build:web        # Production build
+bun run packages/tui/src/index.tsx <session-id>   # TUI client
+```
 
 ## Migration from legacy (v0)
 
