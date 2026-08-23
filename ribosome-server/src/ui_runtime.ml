@@ -163,6 +163,8 @@ let handle_component_event t ~session_id ~revision ~event_id ~target_id ~kind
               let tree_str =
                 Yojson.Safe.to_string (Ribosome.Template.encode tree)
               in
+              t.broadcast.broadcast_template_update ~session_id
+                ~revision:new_session.Ribosome.Session.revision ~tree:tree_str;
               let event_str =
                 Yojson.Safe.to_string
                   (match event with
