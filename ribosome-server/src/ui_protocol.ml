@@ -27,7 +27,6 @@ type component_event = {
 
 type cancel = { session_id : session_id }
 type disconnect = { session_id : session_id }
-type request_generation = { session_id : session_id; prompt : string }
 
 type session_state = {
   session_id : session_id;
@@ -55,7 +54,6 @@ type event_rejection = {
 type message =
   | Attach of attach
   | ComponentEvent of component_event
-  | RequestGeneration of request_generation
   | Cancel of cancel
   | Disconnect of disconnect
   | SessionState of session_state
@@ -105,13 +103,6 @@ let encode_message msg : Yojson.Safe.t =
   | Cancel c ->
       `Assoc
         [ ("kind", `String "cancel"); ("session_id", `String c.session_id) ]
-  | RequestGeneration r ->
-      `Assoc
-        [
-          ("kind", `String "request_generation");
-          ("session_id", `String r.session_id);
-          ("prompt", `String r.prompt);
-        ]
   | Disconnect d ->
       `Assoc
         [ ("kind", `String "disconnect"); ("session_id", `String d.session_id) ]
@@ -192,10 +183,6 @@ let decode_message json : (message, string) result =
   | "cancel" ->
       let* session_id = string_field "session_id" fields in
       Ok (Cancel { session_id })
-  | "request_generation" ->
-      let* session_id = string_field "session_id" fields in
-      let* prompt = string_field "prompt" fields in
-      Ok (RequestGeneration { session_id; prompt })
   | "disconnect" ->
       let* session_id = string_field "session_id" fields in
       Ok (Disconnect { session_id })

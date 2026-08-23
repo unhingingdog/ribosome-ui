@@ -40,11 +40,6 @@
       "kind": "cancel",
       "session_id": "rs-1"
     },
-    "request_generation": {
-      "kind": "request_generation",
-      "session_id": "rs-1",
-      "prompt": "Build a dashboard"
-    },
     "disconnect": {
       "kind": "disconnect",
       "session_id": "rs-1"
