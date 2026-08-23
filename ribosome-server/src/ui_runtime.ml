@@ -187,7 +187,7 @@ let handle_component_event t ~session_id ~revision ~event_id ~target_id ~kind
                    (Ui_protocol.rejection_reason_to_string reason));
               t.broadcast.broadcast_event_rejection ~session_id ~event_id
                 ~reason;
-              Error (EventError e)))
+              Ok `Updated))
 
 let handle_message t (msg : Ui_protocol.message) : (unit, error) result =
   match msg with

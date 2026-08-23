@@ -217,7 +217,7 @@ function SelectField(props: { node: TemplateSelect; onEvent: ComponentProps["onE
 }
 
 function ButtonField(props: { node: TemplateButton; onEvent: ComponentProps["onEvent"] }) {
-  const isSubmit = props.node.action === "Submit";
+  const isSubmit = props.node.action === "Submit" || props.node.action.startsWith("start:");
   return (
     <button
       type={isSubmit ? "submit" : "button"}
