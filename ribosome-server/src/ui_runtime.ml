@@ -189,16 +189,6 @@ let handle_component_event t ~session_id ~revision ~event_id ~target_id ~kind
                 ~reason;
               Error (EventError e)))
 
-let handle_request_generation t ~session_id ~prompt =
-  Debug.log "ui"
-    (Printf.sprintf "request_generation session=%s prompt_len=%d" session_id
-       (String.length prompt));
-  match Hashtbl.find_opt t.sessions session_id with
-  | None -> Error InvalidSession
-  | Some _ ->
-      (* Harness forwarding is Step B. For now, accept and log. *)
-      Ok ()
-
 let handle_message t (msg : Ui_protocol.message) : (unit, error) result =
   match msg with
   | Ui_protocol.Attach a ->
@@ -211,8 +201,6 @@ let handle_message t (msg : Ui_protocol.message) : (unit, error) result =
       with
       | Ok _ -> Ok ()
       | Error e -> Error e)
-  | Ui_protocol.RequestGeneration r ->
-      handle_request_generation t ~session_id:r.session_id ~prompt:r.prompt
   | Ui_protocol.Cancel _ -> Ok ()
   | Ui_protocol.Disconnect _ -> Ok ()
   | _ -> Ok ()
