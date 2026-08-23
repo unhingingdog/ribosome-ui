@@ -67,7 +67,7 @@ export function createAdapterContext(
 }
 
 function isStartTool(toolName: string, config: AdapterConfig): boolean {
-  return toolName === config.mcpToolName;
+  return toolName === config.mcpToolName || toolName.endsWith("_" + config.mcpToolName);
 }
 
 function parseStartResult(

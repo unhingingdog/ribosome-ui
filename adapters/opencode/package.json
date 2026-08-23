@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "Thin harness adapter connecting OpenCode to Ribosome UI server",
   "type": "module",
-  "main": "./dist/entry.js",
+  "main": "./dist/src/entry.js",
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
