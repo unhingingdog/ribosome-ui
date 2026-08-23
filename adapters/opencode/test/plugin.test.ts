@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   createAdapterContext,
   createHooks,
+  connectHarness,
 } from "../src/plugin.js";
 import { createConfig } from "../src/config.js";
 import type { WebSocketLike } from "../src/connection.js";
@@ -370,6 +371,7 @@ describe("plugin hooks — kickoff correlation", () => {
 
     const promptCalls: Array<{ id: string; text: string }> = [];
     ctx.promptClient = {
+      sessionCreate: vi.fn(async () => ({ data: { id: "oc-auto" } })),
       promptAsync: vi.fn(async (body: any) => {
         promptCalls.push({
           id: body.path.id,
@@ -414,6 +416,7 @@ describe("plugin hooks — kickoff correlation", () => {
 
     const promptCalls: Array<{ id: string; text: string }> = [];
     ctx.promptClient = {
+      sessionCreate: vi.fn(async () => ({ data: { id: "oc-auto" } })),
       promptAsync: vi.fn(async (body: any) => {
         promptCalls.push({
           id: body.path.id,
@@ -460,12 +463,17 @@ describe("plugin hooks — kickoff correlation", () => {
     expect(ctx.submission.queuedCount).toBe(0);
   });
 
-  it("rejects user_turn for unknown sessions", async () => {
+  it("handles user_turn for unknown session as UI-initiated", async () => {
     const { ctx, fake } = makeCtx();
     const hooks = createHooks(ctx);
 
+    const sessionCreateCalls: Array<{ title?: string }> = [];
     const promptCalls: Array<{ id: string; text: string }> = [];
     ctx.promptClient = {
+      sessionCreate: vi.fn(async (options?: { body?: { title?: string } }) => {
+        sessionCreateCalls.push({ title: options?.body?.title });
+        return { data: { id: "oc-auto-1" } };
+      }),
       promptAsync: vi.fn(async (body: any) => {
         promptCalls.push({
           id: body.path.id,
@@ -475,18 +483,7 @@ describe("plugin hooks — kickoff correlation", () => {
       }),
     };
 
-    await hooks["tool.execute.before"]!(
-      { tool: "start", sessionID: "oc-1", callID: "call-1" },
-      { args: {} },
-    );
-    await hooks["tool.execute.after"]!(
-      { tool: "start", sessionID: "oc-1", callID: "call-1", args: {} },
-      {
-        title: "",
-        output: JSON.stringify({ session_id: "rs-1", ui_nonce: "u1" }),
-        metadata: {},
-      },
-    );
+    connectHarness(ctx);
     fake.fireOpen();
 
     const userTurn = JSON.stringify({
@@ -496,8 +493,16 @@ describe("plugin hooks — kickoff correlation", () => {
       event: '{"type":"submit"}',
     });
     fake.onmessage!({ data: userTurn } as MessageEvent);
-    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 10));
 
-    expect(promptCalls.length).toBe(0);
+    expect(sessionCreateCalls.length).toBe(1);
+    expect(promptCalls.length).toBe(1);
+    expect(promptCalls[0].id).toBe("oc-auto-1");
+    expect(promptCalls[0].text).toContain("[ribosome-tree]");
+
+    const attach = JSON.parse(fake.sent[0]);
+    expect(attach.kind).toBe("attach");
+    expect(attach.session_id).toBe("rs-unknown");
+    expect(attach.nonce).toBe("pending");
   });
 });

@@ -11,6 +11,9 @@ export interface SubmissionPayload {
 }
 
 export interface PromptClient {
+  sessionCreate(options?: { body?: { title?: string } }): Promise<{
+    data?: { id: string };
+  }>;
   promptAsync(body: {
     path: { id: string };
     body: {

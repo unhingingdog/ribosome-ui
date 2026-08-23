@@ -19,6 +19,7 @@ import {
 } from "./delta.js";
 import {
   createSubmissionInjector,
+  formatSubmission,
   type SubmissionInjector,
   type PromptClient,
   type UserTurnMessage,
@@ -87,6 +88,66 @@ function parseStartResult(
   return null;
 }
 
+function findOcSessionId(ctx: AdapterContext, ribosomeSessionId: string): string | null {
+  for (const [ocId, ribId] of ctx.harnessSessionIdMap) {
+    if (ribId === ribosomeSessionId) return ocId;
+  }
+  return null;
+}
+
+async function handleUiInitiatedTurn(
+  ctx: AdapterContext,
+  userTurn: UserTurnMessage,
+): Promise<void> {
+  if (!ctx.promptClient) {
+    logError("ui-turn", "no prompt client available", {});
+    return;
+  }
+
+  logInfo("ui-turn", "creating OpenCode session for UI-initiated turn", {
+    sessionId: userTurn.session_id,
+  });
+
+  let ocSessionId: string;
+  try {
+    const result = await ctx.promptClient.sessionCreate({
+      body: { title: "Ribosome" },
+    });
+    if (!result.data?.id) {
+      logError("ui-turn", "session.create returned no id", {});
+      return;
+    }
+    ocSessionId = result.data.id;
+  } catch (e) {
+    logError("ui-turn", `session.create failed: ${String(e)}`, {});
+    return;
+  }
+
+  ctx.harnessSessionIdMap.set(ocSessionId, userTurn.session_id);
+  ctx.activeSessionIds.add(ocSessionId);
+  ctx.sessions.set(ocSessionId, {
+    sessionId: ocSessionId,
+    nonce: "pending",
+    harnessConnected: false,
+    pendingKickoff: false,
+    treeRevision: 0,
+  });
+
+  const attachMsg = {
+    kind: "attach",
+    session_id: userTurn.session_id,
+    harness_session_id: userTurn.session_id,
+    nonce: "pending",
+  };
+  if (ctx.harnessConn) {
+    ctx.harnessConn.send(JSON.stringify(attachMsg));
+  }
+
+  const text = formatSubmission(userTurn.tree, userTurn.event);
+  logInfo("ui-turn", "injecting first prompt", { sessionId: ocSessionId });
+  await injectSubmission(ctx, { sessionID: ocSessionId, text });
+}
+
 function decodeHarnessInbound(data: string): UserTurnMessage | null {
   try {
     const parsed = JSON.parse(data);
@@ -116,6 +177,46 @@ async function injectSubmission(
       parts: [{ type: "text" as const, text: payload.text }],
     },
   });
+}
+
+function createHarnessMessageHandler(ctx: AdapterContext): (data: string) => void {
+  return (data: string) => {
+    const userTurn = decodeHarnessInbound(data);
+    if (!userTurn) return;
+
+    const ocSessionId = findOcSessionId(ctx, userTurn.session_id);
+    if (!ocSessionId) {
+      logInfo("harness", "user_turn for unknown session — UI-initiated", {
+        sessionId: userTurn.session_id,
+      });
+      handleUiInitiatedTurn(ctx, userTurn);
+      return;
+    }
+
+    const payload = ctx.submission.handleUserTurn(userTurn);
+    if (payload) {
+      logInfo("submission", "injecting user turn", {
+        sessionId: payload.sessionID,
+      });
+      injectSubmission(ctx, payload);
+    }
+  };
+}
+
+export function connectHarness(ctx: AdapterContext): void {
+  if (ctx.harnessConn) return;
+  const harnessUrl = ctx.config.serverUrl + "/v1/harness";
+  ctx.harnessConn = createConnectionManager(
+    harnessUrl,
+    ctx.wsFactory,
+    createHarnessMessageHandler(ctx),
+    () => {
+      logInfo("harness", "websocket connected");
+    },
+    () => {
+      logWarn("harness", "websocket disconnected, will reconnect");
+    },
+  );
 }
 
 export function createHooks(ctx: AdapterContext): Hooks {
@@ -163,32 +264,8 @@ export function createHooks(ctx: AdapterContext): Hooks {
         callId: input.callID,
       });
 
-      if (!ctx.harnessConn) {
-        const harnessUrl = ctx.config.serverUrl + "/v1/harness";
-        ctx.harnessConn = createConnectionManager(
-          harnessUrl,
-          ctx.wsFactory,
-          (data: string) => {
-            const userTurn = decodeHarnessInbound(data);
-            if (!userTurn) return;
-            const payload = ctx.submission.handleUserTurn(userTurn);
-            if (payload) {
-              logInfo("submission", "injecting user turn", {
-                sessionId: payload.sessionID,
-              });
-              injectSubmission(ctx, payload);
-            }
-          },
-          () => {
-            logInfo("harness", "websocket connected");
-          },
-          () => {
-            logWarn("harness", "websocket disconnected, will reconnect");
-          },
-        );
-      }
-
-      ctx.harnessConn.send(JSON.stringify(attachMsg));
+      connectHarness(ctx);
+      ctx.harnessConn?.send(JSON.stringify(attachMsg));
 
       ctx.activeSessionIds.add(input.sessionID);
       ctx.harnessSessionIdMap.set(input.sessionID, result.session_id);
@@ -280,6 +357,8 @@ export function createPlugin(
 
     setLogSink(createStderrSink());
     logInfo("adapter", "plugin loaded", { sessionId: undefined });
+
+    connectHarness(ctx);
 
     return createHooks(ctx);
   };
