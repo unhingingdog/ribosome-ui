@@ -177,6 +177,12 @@ let () =
                 Dream.json
                   (Printf.sprintf "{\"status\":\"ok\",\"version\":\"%s\"}"
                      Ribosome_server_lib.Server.core_version));
+            Dream.get "/templates" (fun _ ->
+                if Ribosome_server_lib.Debug.enabled then
+                  Dream.json Ribosome_server_lib.Home_template.templates_json
+                else
+                  Dream.respond ~status:`Not_Found
+                    (Yojson.Safe.to_string (`String "not found")));
           ])
     in
     Lwt_main.run
