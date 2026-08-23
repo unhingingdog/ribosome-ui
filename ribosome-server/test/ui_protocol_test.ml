@@ -58,6 +58,10 @@ let test_component_event_change () =
   roundtrip "component_event_change" "component_event"
 
 let test_cancel () = roundtrip "cancel" "cancel"
+
+let test_request_generation () =
+  roundtrip "request_generation" "request_generation"
+
 let test_disconnect () = roundtrip "disconnect" "disconnect"
 let test_session_state () = roundtrip "session_state" "session_state"
 let test_template_update () = roundtrip "template_update" "template_update"
@@ -100,6 +104,7 @@ let () =
           Alcotest.test_case "component_event_change" `Quick
             test_component_event_change;
           Alcotest.test_case "cancel" `Quick test_cancel;
+          Alcotest.test_case "request_generation" `Quick test_request_generation;
           Alcotest.test_case "disconnect" `Quick test_disconnect;
           Alcotest.test_case "session_state" `Quick test_session_state;
           Alcotest.test_case "template_update" `Quick test_template_update;

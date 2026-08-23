@@ -17,6 +17,7 @@ type component_event = {
 
 type cancel = { session_id : session_id }
 type disconnect = { session_id : session_id }
+type request_generation = { session_id : session_id; prompt : string }
 
 type session_state = {
   session_id : session_id;
@@ -43,6 +44,7 @@ type event_rejection = {
 type message =
   | Attach of attach
   | ComponentEvent of component_event
+  | RequestGeneration of request_generation
   | Cancel of cancel
   | Disconnect of disconnect
   | SessionState of session_state
