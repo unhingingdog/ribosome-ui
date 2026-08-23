@@ -42,6 +42,8 @@ let make_config ~skill_root =
   { Ribosome_server_lib.Mcp.registry; id_gen; skill_loader }
 
 let make_runtimes config =
+  let ui_conns = Ribosome_server_lib.Connection_table.create () in
+  let harness_conns = Ribosome_server_lib.Connection_table.create () in
   let h_broadcast =
     {
       Ribosome_server_lib.Harness_runtime.broadcast_template_update =
@@ -59,7 +61,7 @@ let make_runtimes config =
                    ("tree", `String tree);
                  ])
           in
-          Ribosome_server_lib.Message_queue.push session_id msg);
+          Ribosome_server_lib.Connection_table.send ui_conns ~session_id msg);
     }
   in
   let u_broadcast =
@@ -79,7 +81,7 @@ let make_runtimes config =
                    ("tree", `String tree);
                  ])
           in
-          Ribosome_server_lib.Message_queue.push session_id msg);
+          Ribosome_server_lib.Connection_table.send ui_conns ~session_id msg);
       broadcast_session_state =
         (fun ~session_id ~mode ~revision ~tree ~generation_id ->
           Debug.log "ui_broadcast"
@@ -104,7 +106,7 @@ let make_runtimes config =
             | None -> fields
           in
           let msg = Yojson.Safe.to_string (`Assoc fields) in
-          Ribosome_server_lib.Message_queue.push session_id msg);
+          Ribosome_server_lib.Connection_table.send ui_conns ~session_id msg);
       broadcast_event_rejection =
         (fun ~session_id ~event_id ~reason ->
           Debug.log "ui_broadcast"
@@ -123,12 +125,23 @@ let make_runtimes config =
                         .rejection_reason_to_string reason) );
                  ])
           in
-          Ribosome_server_lib.Message_queue.push session_id msg);
+          Ribosome_server_lib.Connection_table.send ui_conns ~session_id msg);
       send_user_turn =
-        (fun ~session_id ~tree:_ ~event:_ ->
+        (fun ~session_id ~tree ~event ->
           Debug.log "ui_broadcast"
             (Printf.sprintf "user_turn session=%s" session_id);
-          ());
+          let msg =
+            Yojson.Safe.to_string
+              (`Assoc
+                 [
+                   ("kind", `String "user_turn");
+                   ("session_id", `String session_id);
+                   ("tree", `String tree);
+                   ("event", `String event);
+                 ])
+          in
+          Ribosome_server_lib.Connection_table.send harness_conns ~session_id
+            msg);
     }
   in
   let harness =
@@ -139,7 +152,8 @@ let make_runtimes config =
     Ribosome_server_lib.Ui_runtime.create
       ~registry:config.Ribosome_server_lib.Mcp.registry ~broadcast:u_broadcast
   in
-  Ribosome_server_lib.Websocket_transport.create ~harness ~ui
+  Ribosome_server_lib.Websocket_transport.create ~harness ~ui ~ui_conns
+    ~harness_conns
 
 let () =
   let open Cmdliner in

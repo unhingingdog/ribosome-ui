@@ -7,6 +7,7 @@
 
 module Ui_protocol : module type of Ui_protocol
 module Home_template : module type of Home_template
+module Connection_table : module type of Connection_table
 module Harness_protocol : module type of Harness_protocol
 module Jsonrpc : module type of Jsonrpc
 module Mcp : module type of Mcp

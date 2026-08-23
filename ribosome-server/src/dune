@@ -4,6 +4,7 @@
   "MCP control, harness stream, and WebSocket UI transport for Ribosome")
  (libraries ribosome yojson lwt dream)
  (modules
+  connection_table
   debug
   harness_handler
   harness_protocol
@@ -12,7 +13,6 @@
   jsonrpc
   mcp
   mcp_stdio
-  message_queue
   server
   session_registry
   ui_handler

@@ -1,32 +1,22 @@
 (* UI WebSocket handler.
 
-   Thin codec around Ui_runtime. Authenticates on attach using the UI nonce.
-   Sends the current snapshot immediately after attachment. Closes malformed
-   or unauthenticated sockets with policy-error codes. *)
+   Thin codec around Ui_runtime. Registers the WebSocket in the connection
+   table on attach so broadcast callbacks can send directly via Lwt.async.
+   Unregisters on close. *)
 
 let max_message_size = 1 lsl 20 (* 1 MiB *)
 
-let handle_websocket ~runtime websocket =
+let handle_websocket ~runtime ~conns websocket =
   let open Lwt.Syntax in
   Debug.log "ui_ws" "connection opened";
   let session_id = ref None in
-  let drain sid =
-    let msgs = Message_queue.drain sid in
-    let rec send = function
-      | [] -> Lwt.return_unit
-      | m :: rest ->
-          let* () = Dream.send websocket m in
-          send rest
-    in
-    send msgs
-  in
   let rec loop () =
-    let* () =
-      match !session_id with Some sid -> drain sid | None -> Lwt.return_unit
-    in
     let* msg = Dream.receive websocket in
     match msg with
     | None -> begin
+        (match !session_id with
+        | Some sid -> Connection_table.unregister conns ~session_id:sid
+        | None -> ());
         Debug.log "ui_ws" "connection closed (EOF)";
         Lwt.return_unit
       end
@@ -44,16 +34,13 @@ let handle_websocket ~runtime websocket =
                 Debug.log "ui_ws"
                   (Printf.sprintf "decoded msg len=%d" (String.length data));
                 (match ui_msg with
-                | Ui_protocol.Attach a -> session_id := Some a.session_id
+                | Ui_protocol.Attach a ->
+                    session_id := Some a.session_id;
+                    Connection_table.register conns ~session_id:a.session_id
+                      websocket
                 | _ -> ());
                 match Ui_runtime.handle_message runtime ui_msg with
-                | Ok _ ->
-                    let* () =
-                      match !session_id with
-                      | Some sid -> drain sid
-                      | None -> Lwt.return_unit
-                    in
-                    loop ()
+                | Ok _ -> loop ()
                 | Error e ->
                     Debug.log "ui_ws"
                       (Printf.sprintf "runtime error, closing: %s"
@@ -72,4 +59,5 @@ let handle_websocket ~runtime websocket =
   in
   loop ()
 
-let handler ~runtime _request = Dream.websocket (handle_websocket ~runtime)
+let handler ~runtime ~conns _request =
+  Dream.websocket (handle_websocket ~runtime ~conns)

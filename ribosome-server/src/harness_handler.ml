@@ -1,18 +1,22 @@
 (* Harness WebSocket handler.
 
-   Thin codec around Harness_runtime. Authenticates on attach using the
-   nonce injected at kickoff. Closes malformed or unauthenticated sockets
-   with policy-error codes. Removes connections on termination. *)
+   Thin codec around Harness_runtime. Registers the WebSocket in the
+   connection table on attach so broadcast callbacks (user_turn) can send
+   directly via Lwt.async. Unregisters on close. *)
 
 let max_message_size = 1 lsl 20 (* 1 MiB *)
 
-let handle_websocket ~runtime websocket =
+let handle_websocket ~runtime ~conns websocket =
   let open Lwt.Syntax in
   Debug.log "harness_ws" "connection opened";
+  let session_id = ref None in
   let rec loop () =
     let* msg = Dream.receive websocket in
     match msg with
     | None -> begin
+        (match !session_id with
+        | Some sid -> Connection_table.unregister conns ~session_id:sid
+        | None -> ());
         Debug.log "harness_ws" "connection closed (EOF)";
         Lwt.return_unit
       end
@@ -29,6 +33,12 @@ let handle_websocket ~runtime websocket =
             | Ok harness_msg -> (
                 Debug.log "harness_ws"
                   (Printf.sprintf "decoded msg len=%d" (String.length data));
+                (match harness_msg with
+                | Harness_protocol.Attach a ->
+                    session_id := Some a.session_id;
+                    Connection_table.register conns ~session_id:a.session_id
+                      websocket
+                | _ -> ());
                 match Harness_runtime.handle_message runtime harness_msg with
                 | Ok _ -> loop ()
                 | Error _ ->
@@ -60,4 +70,5 @@ let handle_websocket ~runtime websocket =
   in
   loop ()
 
-let handler ~runtime _request = Dream.websocket (handle_websocket ~runtime)
+let handler ~runtime ~conns _request =
+  Dream.websocket (handle_websocket ~runtime ~conns)

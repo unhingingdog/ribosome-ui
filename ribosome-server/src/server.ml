@@ -11,7 +11,7 @@ module Debug = Debug
 
 [@@@warning "+60"]
 
-module Message_queue = Message_queue
+module Connection_table = Connection_table
 module Home_template = Home_template
 module Ui_protocol = Ui_protocol
 module Harness_protocol = Harness_protocol
