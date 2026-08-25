@@ -12,3 +12,4 @@ all_ml.txt
 
 # bullshit
 .DS_Store
+.logs/

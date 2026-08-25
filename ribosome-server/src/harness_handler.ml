@@ -2,18 +2,58 @@
 
    Thin codec around Harness_runtime. Registers the WebSocket in the
    connection table on attach so broadcast callbacks (user_turn) can send
-   directly via Lwt.async. Unregisters on close. *)
+   directly via Lwt.async. Unregisters on close.
+
+   Includes a generation idle timeout: if no deltas arrive for 15 seconds
+   while a generation is active, the generation is auto-completed. This
+   handles silent WebSocket drops where generation_completed is lost. *)
 
 let max_message_size = 1 lsl 20 (* 1 MiB *)
+let generation_idle_timeout = 15.0 (* seconds *)
 
 let handle_websocket ~runtime ~conns websocket =
   let open Lwt.Syntax in
   Debug.log "harness_ws" "connection opened";
+  Connection_table.set_pending conns websocket;
   let session_id = ref None in
+  let idle_timer = ref None in
+
+  let cancel_idle_timer () =
+    match !idle_timer with
+    | Some t -> Lwt.cancel t; idle_timer := None
+    | None -> ()
+  in
+
+  let start_idle_timer sid =
+    cancel_idle_timer ();
+    let task =
+      Lwt.bind (Lwt_unix.sleep generation_idle_timeout) (fun () ->
+        let session = Harness_runtime.get_session runtime ~session_id:sid in
+        (match session with
+         | Some s when s.Ribosome.Session.generation <> None ->
+             let gen_id =
+               match s.Ribosome.Session.generation with
+               | Some g -> g.Ribosome.Session.id
+               | None -> ""
+             in
+             Debug.log "harness_ws"
+               (Printf.sprintf "generation idle timeout, auto-completing gen=%s session=%s"
+                  gen_id sid);
+             ignore (Harness_runtime.handle_generation_completed runtime
+                       ~session_id:sid ~generation_id:gen_id)
+         | _ -> ());
+        Lwt.return_unit)
+    in
+    Lwt.async (fun () -> task);
+    idle_timer := Some task
+  in
+
   let rec loop () =
     let* msg = Dream.receive websocket in
     match msg with
     | None -> begin
+        cancel_idle_timer ();
+        Connection_table.clear_pending conns;
         (match !session_id with
         | Some sid -> Connection_table.unregister conns ~session_id:sid
         | None -> ());
@@ -34,11 +74,20 @@ let handle_websocket ~runtime ~conns websocket =
                 Debug.log "harness_ws"
                   (Printf.sprintf "decoded msg len=%d" (String.length data));
                 (match harness_msg with
-                | Harness_protocol.Attach a ->
-                    session_id := Some a.session_id;
-                    Connection_table.register conns ~session_id:a.session_id
-                      websocket
-                | _ -> ());
+                 | Harness_protocol.Attach a ->
+                     Connection_table.clear_pending conns;
+                     session_id := Some a.session_id;
+                     Connection_table.register conns ~session_id:a.session_id
+                       websocket
+                  | Harness_protocol.Delta _ ->
+                     (match !session_id with
+                      | Some sid -> start_idle_timer sid
+                      | None -> ())
+                 | Harness_protocol.GenerationCompleted _ ->
+                     cancel_idle_timer ()
+                 | Harness_protocol.GenerationFailed _ ->
+                     cancel_idle_timer ()
+                 | _ -> ());
                 match Harness_runtime.handle_message runtime harness_msg with
                 | Ok _ -> loop ()
                 | Error _ ->

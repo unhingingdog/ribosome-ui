@@ -104,11 +104,18 @@ let handle_start (config : config) (params : Yojson.Safe.t option) :
     |> String.concat "\n\n---\n\n"
   in
   let result =
-    Session_registry.start ~mode ~id_gen:config.id_gen ~registry:config.registry
-      ~harness_session_id ~harness_nonce ()
+    match
+      Session_registry.start ~mode ~id_gen:config.id_gen ~registry:config.registry
+        ~harness_session_id ~harness_nonce ()
+    with
+    | Error `Duplicate ->
+        (match Session_registry.find config.registry harness_session_id with
+         | Some entry -> Ok entry
+         | None -> Error "duplicate harness session but not found")
+    | Ok entry -> Ok entry
   in
   match result with
-  | Error `Duplicate -> Error "duplicate harness session"
+  | Error msg -> Error msg
   | Ok entry ->
       Debug.log "mcp"
         (Printf.sprintf "start OK session_id=%s mode=%s"

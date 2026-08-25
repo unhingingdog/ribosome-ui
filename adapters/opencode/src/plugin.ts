@@ -1,365 +1,124 @@
+import { Option } from "effect";
 import type { Hooks, PluginInput, PluginOptions } from "@opencode-ai/plugin";
-import { type AdapterConfig, createConfig } from "./config.js";
-import {
-  createSessionStore,
-  type SessionMap,
-} from "./session.js";
-import {
-  createKickoffManager,
-  type KickoffManager,
-} from "./kickoff.js";
-import {
-  createConnectionManager,
-  type ConnectionManager,
-  type WebSocketFactory,
-} from "./connection.js";
-import {
-  createDeltaForwarder,
-  type DeltaForwarder,
-} from "./delta.js";
-import {
-  createSubmissionInjector,
-  formatSubmission,
-  type SubmissionInjector,
-  type PromptClient,
-  type UserTurnMessage,
-} from "./submission.js";
-import { logInfo, logWarn, logError, setLogSink, createStderrSink } from "./diagnostics.js";
+import type { AdapterConfig, InputEvent } from "./types.js";
+import { createConfig } from "./types.js";
+import { createRuntime, type Runtime, type PromptClient } from "./runtime.js";
+import type { WebSocketFactory } from "./transport.js";
 
-export interface AdapterContext {
-  config: AdapterConfig;
-  sessions: SessionMap;
-  kickoff: KickoffManager;
-  delta: DeltaForwarder;
-  submission: SubmissionInjector;
-  promptClient: PromptClient | null;
-  harnessConn: ConnectionManager | null;
-  wsFactory: WebSocketFactory;
-  activeSessionIds: Set<string>;
-  harnessSessionIdMap: Map<string, string>;
-}
-
-export function createAdapterContext(
-  config: AdapterConfig,
-  wsFactory: WebSocketFactory,
-): AdapterContext {
-  const sessions = createSessionStore();
-  const kickoff = createKickoffManager(sessions);
-  const activeSessionIds = new Set<string>();
-  const harnessSessionIdMap = new Map<string, string>();
-  const delta = createDeltaForwarder(activeSessionIds, harnessSessionIdMap);
-  const submission = createSubmissionInjector(
-    activeSessionIds,
-    harnessSessionIdMap,
-  );
-  return {
-    config,
-    sessions,
-    kickoff,
-    delta,
-    submission,
-    promptClient: null,
-    harnessConn: null,
-    wsFactory,
-    activeSessionIds,
-    harnessSessionIdMap,
-  };
-}
-
-function isStartTool(toolName: string, config: AdapterConfig): boolean {
-  return toolName === config.mcpToolName || toolName.endsWith("_" + config.mcpToolName);
-}
-
-function parseStartResult(
-  output: string,
-): { session_id: string; ui_nonce: string } | null {
-  try {
-    const parsed = JSON.parse(output);
-    if (
-      parsed &&
-      typeof parsed.session_id === "string" &&
-      typeof parsed.ui_nonce === "string"
-    ) {
-      return { session_id: parsed.session_id, ui_nonce: parsed.ui_nonce };
-    }
-  } catch {
-    // output may not be JSON
+function toInputEvent(
+  event: { type: string; properties: any },
+  partTypes: Map<string, string>,
+): InputEvent | null {
+  if (event.type === "message.part.updated") {
+    const props = event.properties;
+    const part = props.part;
+    if (!part) return null;
+    const rawPartType = part.type ?? props.type ?? "";
+    const partType = rawPartType === "" ? "text" : rawPartType;
+    if (part.id) partTypes.set(part.id, partType);
+    return {
+      kind: "PartUpdated",
+      ocId: part.sessionID ?? props.sessionID ?? "",
+      messageId: part.messageID ?? props.messageID ?? "",
+      partType,
+      delta: props.delta ? Option.some(props.delta) : Option.none(),
+    };
   }
+
+  if (event.type === "message.part.delta") {
+    const props = event.properties;
+    const partID = props.partID ?? "";
+    const partType = partTypes.get(partID) ?? "text";
+    if (partType !== "text") return null;
+    return {
+      kind: "PartUpdated",
+      ocId: props.sessionID ?? "",
+      messageId: props.messageID ?? "",
+      partType: "text",
+      delta: props.delta ? Option.some(props.delta) : Option.none(),
+    };
+  }
+
+  if (event.type === "session.idle") {
+    return {
+      kind: "SessionIdle",
+      ocId: event.properties.sessionID,
+    };
+  }
+
+  if (event.type === "session.error") {
+    const errorStr = event.properties.error
+      ? JSON.stringify(event.properties.error)
+      : undefined;
+    return {
+      kind: "SessionError",
+      ocId: event.properties.sessionID ?? "",
+      error: errorStr ? Option.some(errorStr) : Option.none(),
+    };
+  }
+
   return null;
-}
-
-function findOcSessionId(ctx: AdapterContext, ribosomeSessionId: string): string | null {
-  for (const [ocId, ribId] of ctx.harnessSessionIdMap) {
-    if (ribId === ribosomeSessionId) return ocId;
-  }
-  return null;
-}
-
-async function handleUiInitiatedTurn(
-  ctx: AdapterContext,
-  userTurn: UserTurnMessage,
-): Promise<void> {
-  if (!ctx.promptClient) {
-    logError("ui-turn", "no prompt client available", {});
-    return;
-  }
-
-  logInfo("ui-turn", "creating OpenCode session for UI-initiated turn", {
-    sessionId: userTurn.session_id,
-  });
-
-  let ocSessionId: string;
-  try {
-    const result = await ctx.promptClient.sessionCreate({
-      body: { title: "Ribosome" },
-    });
-    if (!result.data?.id) {
-      logError("ui-turn", "session.create returned no id", {});
-      return;
-    }
-    ocSessionId = result.data.id;
-  } catch (e) {
-    logError("ui-turn", `session.create failed: ${String(e)}`, {});
-    return;
-  }
-
-  ctx.harnessSessionIdMap.set(ocSessionId, userTurn.session_id);
-  ctx.activeSessionIds.add(ocSessionId);
-  ctx.sessions.set(ocSessionId, {
-    sessionId: ocSessionId,
-    nonce: "pending",
-    harnessConnected: false,
-    pendingKickoff: false,
-    treeRevision: 0,
-  });
-
-  const attachMsg = {
-    kind: "attach",
-    session_id: userTurn.session_id,
-    harness_session_id: userTurn.session_id,
-    nonce: "pending",
-  };
-  if (ctx.harnessConn) {
-    ctx.harnessConn.send(JSON.stringify(attachMsg));
-  }
-
-  const text = formatSubmission(userTurn.tree, userTurn.event);
-  logInfo("ui-turn", "injecting first prompt", { sessionId: ocSessionId });
-  await injectSubmission(ctx, { sessionID: ocSessionId, text });
-}
-
-function decodeHarnessInbound(data: string): UserTurnMessage | null {
-  try {
-    const parsed = JSON.parse(data);
-    if (
-      parsed &&
-      parsed.kind === "user_turn" &&
-      typeof parsed.session_id === "string" &&
-      typeof parsed.tree === "string" &&
-      typeof parsed.event === "string"
-    ) {
-      return parsed as UserTurnMessage;
-    }
-  } catch {
-    // non-JSON or other message types — ignore
-  }
-  return null;
-}
-
-async function injectSubmission(
-  ctx: AdapterContext,
-  payload: { sessionID: string; text: string },
-): Promise<void> {
-  if (!ctx.promptClient) return;
-  await ctx.promptClient.promptAsync({
-    path: { id: payload.sessionID },
-    body: {
-      parts: [{ type: "text" as const, text: payload.text }],
-    },
-  });
-}
-
-function createHarnessMessageHandler(ctx: AdapterContext): (data: string) => void {
-  return (data: string) => {
-    const userTurn = decodeHarnessInbound(data);
-    if (!userTurn) return;
-
-    const ocSessionId = findOcSessionId(ctx, userTurn.session_id);
-    if (!ocSessionId) {
-      logInfo("harness", "user_turn for unknown session — UI-initiated", {
-        sessionId: userTurn.session_id,
-      });
-      handleUiInitiatedTurn(ctx, userTurn);
-      return;
-    }
-
-    const payload = ctx.submission.handleUserTurn(userTurn);
-    if (payload) {
-      logInfo("submission", "injecting user turn", {
-        sessionId: payload.sessionID,
-      });
-      injectSubmission(ctx, payload);
-    }
-  };
-}
-
-export function connectHarness(ctx: AdapterContext): void {
-  if (ctx.harnessConn) return;
-  const harnessUrl = ctx.config.serverUrl + "/v1/harness";
-  ctx.harnessConn = createConnectionManager(
-    harnessUrl,
-    ctx.wsFactory,
-    createHarnessMessageHandler(ctx),
-    () => {
-      logInfo("harness", "websocket connected");
-    },
-    () => {
-      logWarn("harness", "websocket disconnected, will reconnect");
-    },
-  );
-}
-
-export function createHooks(ctx: AdapterContext): Hooks {
-  return {
-    "tool.execute.before": async (input, output) => {
-      if (!isStartTool(input.tool, ctx.config)) return;
-      const pending = ctx.kickoff.recordPending(input.callID, input.sessionID);
-      logInfo("kickoff", "injecting nonce for start tool", {
-        sessionId: input.sessionID,
-        callId: input.callID,
-      });
-      if (output.args && typeof output.args === "object") {
-        (output.args as Record<string, unknown>)._harness_session_id =
-          pending.sessionID;
-        (output.args as Record<string, unknown>)._nonce = pending.nonce;
-      }
-    },
-
-    "tool.execute.after": async (input, output) => {
-      if (!isStartTool(input.tool, ctx.config)) return;
-      const result = parseStartResult(output.output);
-      if (!result) {
-        logWarn("kickoff", "start tool returned non-JSON output, clearing pending", {
-          sessionId: input.sessionID,
-          callId: input.callID,
-        });
-        ctx.kickoff.clearPending(input.callID);
-        return;
-      }
-      const attachMsg = ctx.kickoff.activate(
-        input.callID,
-        result.session_id,
-        result.ui_nonce,
-      );
-      if (!attachMsg) {
-        logError("kickoff", "no pending kickoff found for call", {
-          sessionId: input.sessionID,
-          callId: input.callID,
-        });
-        return;
-      }
-
-      logInfo("kickoff", "activated session, connecting harness", {
-        sessionId: input.sessionID,
-        callId: input.callID,
-      });
-
-      connectHarness(ctx);
-      ctx.harnessConn?.send(JSON.stringify(attachMsg));
-
-      ctx.activeSessionIds.add(input.sessionID);
-      ctx.harnessSessionIdMap.set(input.sessionID, result.session_id);
-    },
-
-    event: async (input) => {
-      const ev = input.event;
-
-      if (ev.type === "message.part.updated") {
-        const part = ev.properties.part;
-        const deltaStr = ev.properties.delta;
-        const msg = ctx.delta.handlePartDelta(
-          part.sessionID,
-          part.messageID,
-          part.type,
-          deltaStr,
-        );
-        if (msg && ctx.harnessConn) {
-          ctx.harnessConn.send(JSON.stringify(msg));
-        }
-        return;
-      }
-
-      if (ev.type === "session.idle") {
-        const sessionID = ev.properties.sessionID;
-        const session = ctx.sessions.get(sessionID);
-        if (session) {
-          session.pendingKickoff = false;
-        }
-        const completed = ctx.delta.handleSessionIdle(sessionID);
-        if (completed && ctx.harnessConn) {
-          ctx.harnessConn.send(JSON.stringify(completed));
-        }
-        const next = ctx.submission.flushQueue(sessionID);
-        if (next) {
-          logInfo("submission", "flushing queued submission", {
-            sessionId: sessionID,
-          });
-          injectSubmission(ctx, next);
-        }
-        return;
-      }
-
-      if (ev.type === "session.error") {
-        const sessionID = ev.properties.sessionID;
-        if (sessionID) {
-          logError("session", "session error, clearing state", {
-            sessionId: sessionID,
-          });
-          const failed = ctx.delta.handleSessionError(
-            sessionID,
-            ev.properties.error
-              ? JSON.stringify(ev.properties.error)
-              : undefined,
-          );
-          if (failed && ctx.harnessConn) {
-            ctx.harnessConn.send(JSON.stringify(failed));
-          }
-          ctx.kickoff.clearActive(sessionID);
-          ctx.submission.clear(sessionID);
-          ctx.activeSessionIds.delete(sessionID);
-          ctx.harnessSessionIdMap.delete(sessionID);
-        }
-        return;
-      }
-    },
-
-    dispose: async () => {
-      logInfo("adapter", "disposing");
-      if (ctx.harnessConn) {
-        ctx.harnessConn.close();
-        ctx.harnessConn = null;
-      }
-    },
-  };
 }
 
 export function createPlugin(
   wsFactory: WebSocketFactory,
   defaultConfig?: Partial<AdapterConfig>,
 ): (input: PluginInput, options?: PluginOptions) => Promise<Hooks> {
-  return async (input, options) => {
+  return async (input, _options) => {
     const config = createConfig(
       defaultConfig?.serverUrl ?? "ws://127.0.0.1:8787",
       defaultConfig?.mcpToolName,
     );
-    const ctx = createAdapterContext(config, wsFactory);
-    ctx.promptClient = input.client as unknown as PromptClient;
 
-    setLogSink(createStderrSink());
-    logInfo("adapter", "plugin loaded", { sessionId: undefined });
+    const promptClient = input.client as unknown as PromptClient;
+    const runtime = createRuntime(config, wsFactory, promptClient);
+    const partTypes = new Map<string, string>();
 
-    connectHarness(ctx);
+    return {
+      "tool.execute.before": async (toolInput, output) => {
+        let nonce = "";
+        if (
+          toolInput.tool === config.mcpToolName ||
+          toolInput.tool.endsWith("_" + config.mcpToolName)
+        ) {
+          if (output.args && typeof output.args === "object") {
+            const args = output.args as Record<string, unknown>;
+            nonce = `oc-${Math.random().toString(36).slice(2, 10)}`;
+            args._nonce = nonce;
+            args._harness_session_id = toolInput.sessionID;
+          }
+        }
 
-    return createHooks(ctx);
+        runtime.push({
+          kind: "ToolBefore",
+          ocId: toolInput.sessionID,
+          tool: toolInput.tool,
+          callId: toolInput.callID,
+          nonce,
+        });
+      },
+
+      "tool.execute.after": async (toolInput, toolOutput) => {
+        runtime.push({
+          kind: "ToolAfter",
+          ocId: toolInput.sessionID,
+          tool: toolInput.tool,
+          callId: toolInput.callID,
+          output: toolOutput.output,
+        });
+      },
+
+      event: async (eventInput) => {
+        const ev = toInputEvent(
+          eventInput.event as { type: string; properties: any },
+          partTypes,
+        );
+        if (ev) runtime.push(ev);
+      },
+
+      dispose: async () => {
+        runtime.shutdown();
+      },
+    };
   };
 }

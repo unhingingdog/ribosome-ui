@@ -36,7 +36,13 @@ let test_ui_mode () =
   Alcotest.(check string) "ui mode id" "ui" Ribosome.Mode.ui.id;
   Alcotest.(check (list string))
     "ui mode skills"
-    [ "skills/ribosome/SKILL.md" ]
+    [
+      "skills/ribosome/SKILL.md";
+      "skills/show-me/SKILL.md";
+      "skills/isometric-diagram/SKILL.md";
+      "skills/ribosome-conversation/SKILL.md";
+      "skills/pr-quizzer/SKILL.md";
+    ]
     Ribosome.Mode.ui.skills
 
 let test_registry_has_ui () =

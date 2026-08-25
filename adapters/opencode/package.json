@@ -1,16 +1,20 @@
 {
   "name": "@ribosome/opencode-adapter",
   "version": "0.0.0",
-  "description": "Thin harness adapter connecting OpenCode to Ribosome UI server",
+  "description": "Functional harness adapter connecting OpenCode to Ribosome UI server",
   "type": "module",
   "main": "./dist/src/entry.js",
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run --exclude test/integration.test.ts",
+    "test:integration": "dune build @all && vitest run test/integration.test.ts",
     "typecheck": "tsc --noEmit",
-    "build": "tsc"
+    "build": "tsc",
+    "postinstall": "bash scripts/install-skills.sh"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "*"
+    "@opencode-ai/plugin": "*",
+    "effect": "^3.0.0",
+    "rxjs": "^7.8.0"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

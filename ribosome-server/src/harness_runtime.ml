@@ -65,6 +65,8 @@ let handle_attach t ~session_id ~harness_session_id ~nonce =
           Session_registry.attach_harness t.registry session_id
             ~conn_id:session_id
         in
+        if not (Hashtbl.mem t.sessions session_id) then
+          register_session t ~session_id;
         Debug.log "harness" (Printf.sprintf "attach OK session=%s" session_id);
         Ok ()
 

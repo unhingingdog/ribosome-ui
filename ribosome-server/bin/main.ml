@@ -16,8 +16,15 @@ let read_file path =
   with _ -> None
 
 let load_skills root =
-  let skill_path = Filename.concat root "ribosome/SKILL.md" in
-  read_file skill_path
+  let skill_names = [ "ribosome"; "show-me"; "isometric-diagram"; "ribosome-conversation"; "pr-quizzer" ] in
+  let table = Hashtbl.create 8 in
+  Stdlib.List.iter (fun name ->
+    let path = Filename.concat (Filename.concat root name) "SKILL.md" in
+    match read_file path with
+    | Some content -> Hashtbl.add table name content
+    | None -> ()
+  ) skill_names;
+  table
 
 let make_config ~skill_root =
   let registry = Ribosome_server_lib.Session_registry.create () in
@@ -34,16 +41,47 @@ let make_config ~skill_root =
           "ui-nonce-" ^ string_of_int !n);
     }
   in
-  let skills = load_skills skill_root in
-  let skill_loader = function
-    | "skills/ribosome/SKILL.md" -> skills
-    | _ -> None
+  let skills_table = load_skills skill_root in
+  let skill_loader path =
+    let name = Filename.basename (Filename.dirname path) in
+    Hashtbl.find_opt skills_table name
   in
   { Ribosome_server_lib.Mcp.registry; id_gen; skill_loader }
 
 let make_runtimes config =
   let ui_conns = Ribosome_server_lib.Connection_table.create () in
   let harness_conns = Ribosome_server_lib.Connection_table.create () in
+  (* Forward refs for cross-runtime session sync *)
+  let harness_ref = ref None in
+  let ui_ref = ref None in
+  let sync_harness_to_ui ~session_id =
+    match (!harness_ref, !ui_ref) with
+    | (Some h, Some u) ->
+        (match Ribosome_server_lib.Harness_runtime.get_session h ~session_id with
+         | Some session ->
+             Ribosome_server_lib.Ui_runtime.put_session u ~session_id session
+         | None -> ())
+    | _ -> ()
+  in
+  let sync_ui_to_harness ~session_id =
+    match (!ui_ref, !harness_ref) with
+    | (Some u, Some h) ->
+        (match Ribosome_server_lib.Ui_runtime.get_session u ~session_id with
+         | Some ui_session ->
+             (match Ribosome_server_lib.Harness_runtime.get_session h ~session_id with
+              | Some harness_session ->
+                  let synced =
+                    { (ui_session : Ribosome.Session.t) with
+                      generation = harness_session.Ribosome.Session.generation;
+                      incremental = harness_session.Ribosome.Session.incremental;
+                    }
+                  in
+                  Ribosome_server_lib.Harness_runtime.put_session h ~session_id synced
+              | None ->
+                  Ribosome_server_lib.Harness_runtime.put_session h ~session_id ui_session)
+         | None -> ())
+    | _ -> ()
+  in
   let h_broadcast =
     {
       Ribosome_server_lib.Harness_runtime.broadcast_template_update =
@@ -51,6 +89,8 @@ let make_runtimes config =
           Debug.log "harness_broadcast"
             (Printf.sprintf "template_update session=%s rev=%d" session_id
                revision);
+          (* Sync session from harness → UI so revisions stay aligned *)
+          sync_harness_to_ui ~session_id;
           let msg =
             Yojson.Safe.to_string
               (`Assoc
@@ -130,6 +170,8 @@ let make_runtimes config =
         (fun ~session_id ~tree ~event ->
           Debug.log "ui_broadcast"
             (Printf.sprintf "user_turn session=%s" session_id);
+          (* Sync session from UI → harness so revisions stay aligned *)
+          sync_ui_to_harness ~session_id;
           let msg =
             Yojson.Safe.to_string
               (`Assoc
@@ -152,6 +194,8 @@ let make_runtimes config =
     Ribosome_server_lib.Ui_runtime.create
       ~registry:config.Ribosome_server_lib.Mcp.registry ~broadcast:u_broadcast
   in
+  harness_ref := Some harness;
+  ui_ref := Some ui;
   Ribosome_server_lib.Websocket_transport.create ~harness ~ui ~ui_conns
     ~harness_conns
 
@@ -197,6 +241,17 @@ let () =
                 else
                   Dream.respond ~status:`Not_Found
                     (Yojson.Safe.to_string (`String "not found")));
+            Dream.get "/skills" (fun _ ->
+                let skills_table = load_skills skill_root in
+                let entries =
+                  Hashtbl.fold (fun name content acc ->
+                    `Assoc [
+                      ("name", `String name);
+                      ("content", `String content);
+                    ] :: acc
+                  ) skills_table []
+                in
+                Dream.json (Yojson.Safe.to_string (`List (Stdlib.List.rev entries))));
           ])
     in
     Lwt_main.run

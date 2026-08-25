@@ -1,6 +1,9 @@
 import { createPlugin } from "./plugin.js";
+import { setLogSink, createStderrSink } from "./log.js";
 
-const server = createPlugin(
+setLogSink(createStderrSink());
+
+const plugin = createPlugin(
   (url: string) => new WebSocket(url) as any,
   {
     serverUrl: process.env.RIBOSOME_SERVER_URL ?? "ws://127.0.0.1:8787",
@@ -8,4 +11,4 @@ const server = createPlugin(
   },
 );
 
-export default server;
+export default plugin;

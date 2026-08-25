@@ -168,9 +168,22 @@ let handle_component_event t ~session_id ~revision ~event_id ~target_id ~kind
               let event_str =
                 Yojson.Safe.to_string
                   (match event with
-                  | Ribosome.Event.Click _ -> `Null
-                  | Ribosome.Event.Change _ -> `Null
-                  | Ribosome.Event.Submit _ -> `Null)
+                  | Ribosome.Event.Click { target_id } ->
+                      `Assoc
+                        [ ("type", `String "click");
+                          ("target_id", `String target_id) ]
+                  | Ribosome.Event.Change { target_id; value } ->
+                      `Assoc
+                        [ ("type", `String "change");
+                          ("target_id", `String target_id);
+                          ("value",
+                            (match value with
+                            | Ribosome.Template.Input.String s -> `String s
+                            | Ribosome.Template.Input.Int i -> `Int i)) ]
+                  | Ribosome.Event.Submit { target_id } ->
+                      `Assoc
+                        [ ("type", `String "submit");
+                          ("target_id", `String target_id) ])
               in
               t.broadcast.send_user_turn ~session_id ~tree:tree_str
                 ~event:event_str;
