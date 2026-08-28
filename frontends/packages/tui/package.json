@@ -4,7 +4,7 @@
   "description": "Terminal UI client for Ribosome UI — @opentui/solid → terminal",
   "type": "module",
   "scripts": {
-    "dev": "bun --preload @opentui/solid/preload run src/index.tsx",
+    "dev": "bun run --preload @opentui/solid/preload src/index.tsx",
     "build": "bun build src/index.tsx --outdir dist --target bun",
     "typecheck": "tsc --noEmit"
   },

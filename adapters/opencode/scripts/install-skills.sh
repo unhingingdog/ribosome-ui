@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SKILL_SRC="$(cd "$(dirname "$0")/../../skills" && pwd)"
+SKILL_SRC="$(cd "$(dirname "$0")/../../../skills" && pwd)"
 SKILL_DST="${HOME}/.config/opencode/skills"
 
 mkdir -p "$SKILL_DST"

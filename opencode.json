@@ -1,4 +1,12 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "instructions": ["AGENTS.md"]
+  "instructions": ["AGENTS.md"],
+
+  "mcp": {
+    "ribosome": {
+      "type": "local",
+      "command": ["ribosome-server", "--stdio", "--port", "8787"],
+      "enabled": false
+    }
+  }
 }

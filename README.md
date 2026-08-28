@@ -78,7 +78,7 @@ pnpm -r typecheck
 pnpm -r test
 pnpm dev:web          # Vite dev server
 pnpm build:web        # Production build
-bun run packages/tui/src/index.tsx <session-id>   # TUI client
+pnpm dev:tui          # TUI client (run from frontends/)
 ```
 
 ## Migration from legacy (v0)
