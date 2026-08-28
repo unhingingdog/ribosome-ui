@@ -46,10 +46,9 @@ describe("reduce — ToolBefore", () => {
       ocId: "oc-1",
       tool: "start",
       callId: "call-1",
-      nonce: "nonce-abc",
+nonce: Option.some("nonce-abc"),
     };
     const t = reduce(store, ev, config);
-
     const session = t.store.sessions.get("oc-1");
     expect(session).toBeDefined();
     expect(session!.phase._tag).toBe("KickoffPending");
@@ -64,7 +63,7 @@ describe("reduce — ToolBefore", () => {
       ocId: "oc-1",
       tool: "other_tool",
       callId: "call-1",
-      nonce: "",
+      nonce: Option.none(),
     };
     const t = reduce(store, ev, config);
     expect(t.store.sessions.size).toBe(0);
@@ -84,6 +83,32 @@ describe("reduce — ToolAfter", () => {
       tool: "start",
       callId: "call-1",
       output: JSON.stringify({ session_id: "rs-1", ui_nonce: "ui-nonce" }),
+    };
+    const t = reduce(store, ev, config);
+
+    const session = t.store.sessions.get("oc-1");
+    expect(session!.phase._tag).toBe("Streaming");
+    expect(Option.getOrNull(session!.ribId)).toBe("rs-1");
+
+    const sends = harnessMsgs(t.effects);
+    expect(sends).toHaveLength(1);
+    expect((sends[0] as any).msg.kind).toBe("attach");
+    expect((sends[0] as any).msg.session_id).toBe("rs-1");
+    expect((sends[0] as any).msg.harness_session_id).toBe("oc-1");
+    expect((sends[0] as any).msg.nonce).toBe("nonce-abc");
+  });
+
+  it("activates session when start result arrives as a raw object (MCP structuredContent)", () => {
+    const store = storeWithSession("oc-1", {
+      phase: SessionPhase.KickoffPending("call-1"),
+      nonce: Option.some("nonce-abc"),
+    });
+    const ev: InputEvent = {
+      kind: "ToolAfter",
+      ocId: "oc-1",
+      tool: "start",
+      callId: "call-1",
+      output: { session_id: "rs-1", ui_nonce: "ui-nonce", mode: "ui" },
     };
     const t = reduce(store, ev, config);
 
@@ -520,7 +545,7 @@ describe("reduce — full two-turn flow", () => {
       ocId: "oc-1",
       tool: "start",
       callId: "call-1",
-      nonce: "nonce-abc",
+      nonce: Option.some("nonce-abc"),
     }, config);
     store = t.store;
     expect(t.effects).toHaveLength(0);

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@opencode-ai/plugin": "*",
+    "@opencode-ai/sdk": "*",
     "effect": "^3.0.0",
     "rxjs": "^7.8.0"
   },

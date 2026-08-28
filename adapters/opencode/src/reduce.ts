@@ -2,9 +2,11 @@ import { Option } from "effect";
 import type {
   AdapterConfig,
   Effect,
+  HarnessOutbound,
   InputEvent,
   SessionState,
   SessionStore,
+  StreamingPhase,
   Transition,
   UserTurn,
 } from "./types.js";
@@ -19,6 +21,11 @@ import {
 } from "./types.js";
 import { formatPrompt } from "./skills.js";
 
+interface StartResult {
+  readonly session_id: string;
+  readonly ui_nonce: string;
+}
+
 function noEffects(store: SessionStore): Transition {
   return { store, effects: [] };
 }
@@ -27,30 +34,53 @@ function effects(store: SessionStore, ...effs: Effect[]): Transition {
   return { store, effects: effs };
 }
 
-function parseStartResult(
-  output: string,
-): { session_id: string; ui_nonce: string } | null {
-  try {
-    const parsed = JSON.parse(output);
-    if (
-      parsed &&
-      typeof parsed.session_id === "string" &&
-      typeof parsed.ui_nonce === "string"
-    ) {
-      return { session_id: parsed.session_id, ui_nonce: parsed.ui_nonce };
-    }
-  } catch {
-    // output may not be JSON
-  }
-  return null;
+function generateMessageId(): string {
+  return `msg-ribo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function scanForJsonStart(
-  prefix: string,
-): { found: boolean; content: string } {
+function isStartResult(value: unknown): value is StartResult {
+  if (typeof value !== "object" || value === null) return false;
+  const rec = value as Record<string, unknown>;
+  return typeof rec.session_id === "string" && typeof rec.ui_nonce === "string";
+}
+
+// The start tool returns a JSON blob; output may not be JSON at all.
+// opencode passes MCP tool results to tool.execute.after as the raw
+// CallToolResult ({content, structuredContent, isError}), so the parsed
+// value may already be an object.
+function parseStartResult(output: unknown): Option.Option<StartResult> {
+  const parsed: unknown =
+    typeof output === "object" && output !== null
+      ? output
+      : (() => {
+          try {
+            return JSON.parse(String(output));
+          } catch {
+            return undefined;
+          }
+        })();
+  return isStartResult(parsed) ? Option.some(parsed) : Option.none();
+}
+
+function scanForJsonStart(prefix: string): { found: boolean; content: string } {
   const idx = prefix.search(/[{[]/);
   if (idx === -1) return { found: false, content: "" };
   return { found: true, content: prefix.slice(idx) };
+}
+
+function startStreaming(messageId: string): StreamingPhase {
+  return {
+    _tag: "Streaming",
+    genId: messageId,
+    seq: 0,
+    jsonStarted: false,
+    buffer: "",
+    pendingPrefix: "",
+  };
+}
+
+function kickoff(state: SessionState, callId: string, nonce: Option.Option<string>): SessionState {
+  return { ...state, phase: SessionPhase.KickoffPending(callId), nonce };
 }
 
 function reduceToolBefore(
@@ -59,18 +89,34 @@ function reduceToolBefore(
   config: AdapterConfig,
 ): Transition {
   if (!isStartTool(ev.tool, config)) return noEffects(store);
+  const base = store.sessions.get(ev.ocId) ?? makeSession(ev.ocId);
+  return noEffects(putSession(store, kickoff(base, ev.callId, ev.nonce)));
+}
 
-  const existing = store.sessions.get(ev.ocId);
+function resetToIdle(store: SessionStore, ocId: string): SessionStore {
+  return updateStore(store, ocId, (s) => ({ ...s, phase: SessionPhase.Idle() }));
+}
 
-  const state: SessionState = existing
-    ? { ...existing, phase: SessionPhase.KickoffPending(ev.callId), nonce: Option.some(ev.nonce) }
-    : {
-        ...makeSession(ev.ocId),
-        phase: SessionPhase.KickoffPending(ev.callId),
-        nonce: Option.some(ev.nonce),
-      };
-
-  return noEffects(putSession(store, state));
+function attachSession(
+  store: SessionStore,
+  state: SessionState,
+  ocId: string,
+  result: StartResult,
+): Transition {
+  const updated = updateStore(store, ocId, (s) => ({
+    ...s,
+    ribId: Option.some(result.session_id),
+    phase: startStreaming(""),
+  }));
+  return effects(updated, {
+    kind: "SendHarness",
+    msg: {
+      kind: "attach",
+      session_id: result.session_id,
+      harness_session_id: ocId,
+      nonce: Option.getOrElse(state.nonce, () => ""),
+    },
+  });
 }
 
 function reduceToolAfter(
@@ -81,36 +127,42 @@ function reduceToolAfter(
   if (!isStartTool(ev.tool, config)) return noEffects(store);
 
   const state = store.sessions.get(ev.ocId);
-  if (!state || state.phase._tag !== "KickoffPending") {
-    return noEffects(store);
-  }
+  if (!state || state.phase._tag !== "KickoffPending") return noEffects(store);
 
-  const result = parseStartResult(ev.output);
-  if (!result) {
-    const cleared = updateStore(store, ev.ocId, (s) => ({
-      ...s,
-      phase: SessionPhase.Idle(),
-    }));
-    return noEffects(cleared);
-  }
-
-  const harnessNonce = Option.getOrNull(state.nonce) ?? "";
-
-  const updated = updateStore(store, ev.ocId, (s) => ({
-    ...s,
-    ribId: Option.some(result.session_id),
-    phase: SessionPhase.Streaming("", 0, false, "", ""),
-  }));
-
-  return effects(updated, {
-    kind: "SendHarness",
-    msg: {
-      kind: "attach",
-      session_id: result.session_id,
-      harness_session_id: ev.ocId,
-      nonce: harnessNonce,
-    },
+  return Option.match(parseStartResult(ev.output), {
+    onNone: () => noEffects(resetToIdle(store, ev.ocId)),
+    onSome: (result) => attachSession(store, state, ev.ocId, result),
   });
+}
+
+function streamFields(phase: SessionPhase, messageId: string): Option.Option<StreamingPhase> {
+  switch (phase._tag) {
+    case "Idle":
+    case "AwaitingTurn":
+    case "KickoffPending":
+      return Option.some(startStreaming(messageId));
+    case "Streaming":
+      return Option.some(phase.genId === "" ? { ...phase, genId: messageId } : phase);
+    case "Completing":
+      return Option.none();
+  }
+}
+
+function appendDelta(fields: StreamingPhase, delta: string): StreamingPhase {
+  if (fields.jsonStarted) {
+    return { ...fields, buffer: fields.buffer + delta };
+  }
+  const combined = fields.pendingPrefix + delta;
+  const scan = scanForJsonStart(combined);
+  if (!scan.found) {
+    return { ...fields, pendingPrefix: combined };
+  }
+  return {
+    ...fields,
+    jsonStarted: true,
+    buffer: fields.buffer + scan.content,
+    pendingPrefix: "",
+  };
 }
 
 function reducePartUpdated(
@@ -120,92 +172,92 @@ function reducePartUpdated(
   const state = store.sessions.get(ev.ocId);
   if (!state) return noEffects(store);
 
-  if (state.injectedMessageIds.has(ev.messageId)) {
-    return noEffects(store);
-  }
-
+  if (state.injectedMessageIds.has(ev.messageId)) return noEffects(store);
   if (ev.partType !== "text") return noEffects(store);
+  if (Option.isNone(state.ribId)) return noEffects(store);
 
-  const deltaStr = Option.getOrNull(ev.delta);
-  if (!deltaStr) return noEffects(store);
+  const flow = Option.zipWith(
+    Option.filter(ev.delta, (delta) => delta !== ""),
+    streamFields(state.phase, ev.messageId),
+    (delta, fields) => ({ delta, fields }),
+  );
 
-  const ribId = Option.getOrNull(state.ribId);
-  if (!ribId) return noEffects(store);
-
-  let phase = state.phase;
-
-  if (phase._tag === "Idle" || phase._tag === "AwaitingTurn" || phase._tag === "KickoffPending") {
-    phase = SessionPhase.Streaming(ev.messageId, 0, false, "", "");
-  }
-
-  if (phase._tag !== "Streaming") return noEffects(store);
-
-  let { genId, seq, jsonStarted, buffer, pendingPrefix } = phase;
-
-  if (genId === "") {
-    genId = ev.messageId;
-  }
-  let content = deltaStr;
-
-  if (!jsonStarted) {
-    pendingPrefix += deltaStr;
-    const scan = scanForJsonStart(pendingPrefix);
-    if (!scan.found) {
-      const updated = updateStore(store, ev.ocId, (s) => ({
-        ...s,
-        phase: SessionPhase.Streaming(genId, seq, false, "", pendingPrefix),
-      }));
-      return noEffects(updated);
-    }
-    jsonStarted = true;
-    content = scan.content;
-    pendingPrefix = "";
-  }
-
-  buffer += content;
-
-  const updated = updateStore(store, ev.ocId, (s) => ({
-    ...s,
-    phase: SessionPhase.Streaming(genId, seq, jsonStarted, buffer, pendingPrefix),
-  }));
-
-  return noEffects(updated);
+  return Option.match(flow, {
+    onNone: () => noEffects(store),
+    onSome: ({ delta, fields }) => {
+      const phase = appendDelta(fields, delta);
+      return noEffects(updateStore(store, ev.ocId, (s) => ({ ...s, phase })));
+    },
+  });
 }
 
-function reduceFlushBatch(
-  store: SessionStore,
-  ocId: string,
-): Transition {
-  const state = store.sessions.get(ocId);
-  if (!state) return noEffects(store);
-
-  const phase = state.phase;
-  if (phase._tag !== "Streaming") return noEffects(store);
-  if (phase.buffer.length === 0) return noEffects(store);
-
-  const ribId = Option.getOrNull(state.ribId);
-  if (!ribId) return noEffects(store);
-
-  const msg = {
-    kind: "delta" as const,
+function deltaFrame(ribId: string, phase: StreamingPhase): HarnessOutbound {
+  return {
+    kind: "delta",
     session_id: ribId,
     generation_id: phase.genId,
     seq: phase.seq,
     content: phase.buffer,
   };
+}
 
-  const updated = updateStore(store, ocId, (s) => ({
-    ...s,
-    phase: SessionPhase.Streaming(
-      phase.genId,
-      phase.seq + 1,
-      phase.jsonStarted,
-      "",
-      "",
-    ),
-  }));
+function consumeBuffer(phase: StreamingPhase): StreamingPhase {
+  return { ...phase, seq: phase.seq + 1, buffer: "", pendingPrefix: "" };
+}
 
-  return effects(updated, { kind: "SendHarness", msg });
+function reduceFlushBatch(store: SessionStore, ocId: string): Transition {
+  const state = store.sessions.get(ocId);
+  if (!state) return noEffects(store);
+
+  const phase = state.phase;
+  if (phase._tag !== "Streaming" || phase.buffer.length === 0) return noEffects(store);
+
+  return Option.match(state.ribId, {
+    onNone: () => noEffects(store),
+    onSome: (ribId) => {
+      const updated = updateStore(store, ocId, (s) => ({ ...s, phase: consumeBuffer(phase) }));
+      return effects(updated, { kind: "SendHarness", msg: deltaFrame(ribId, phase) });
+    },
+  });
+}
+
+function completionFrames(ribId: string, phase: SessionPhase): ReadonlyArray<HarnessOutbound> {
+  if (phase._tag !== "Streaming") return [];
+  const frames: HarnessOutbound[] = [];
+  if (phase.buffer.length > 0) {
+    frames.push(deltaFrame(ribId, phase));
+  }
+  frames.push({
+    kind: "generation_completed",
+    session_id: ribId,
+    generation_id: phase.genId,
+  });
+  return frames;
+}
+
+function settleQueuedTurn(
+  store: SessionStore,
+  state: SessionState,
+): { store: SessionStore; effects: Effect[] } {
+  return Option.match(state.queuedTurn, {
+    onNone: () => ({
+      store: updateStore(store, state.ocId, (s) => ({ ...s, phase: SessionPhase.AwaitingTurn() })),
+      effects: [],
+    }),
+    onSome: (turn) => {
+      const messageId = generateMessageId();
+      const text = formatPrompt(turn.tree, turn.event);
+      return {
+        store: updateStore(store, state.ocId, (s) => ({
+          ...s,
+          phase: startStreaming(""),
+          queuedTurn: Option.none(),
+          injectedMessageIds: new Set([...s.injectedMessageIds, messageId]),
+        })),
+        effects: [{ kind: "InjectPrompt", ocId: state.ocId, text, messageId }],
+      };
+    },
+  });
 }
 
 function reduceSessionIdle(
@@ -215,61 +267,20 @@ function reduceSessionIdle(
   const state = store.sessions.get(ev.ocId);
   if (!state) return noEffects(store);
 
-  const ribId = Option.getOrNull(state.ribId);
-  if (!ribId) return noEffects(store);
-
   const phase = state.phase;
-  const effs: Effect[] = [];
+  if (phase._tag !== "Streaming" && phase._tag !== "Completing") return noEffects(store);
 
-  let nextStore = store;
-
-  if (phase._tag === "Streaming") {
-    if (phase.buffer.length > 0) {
-      effs.push({
-        kind: "SendHarness",
-        msg: {
-          kind: "delta",
-          session_id: ribId,
-          generation_id: phase.genId,
-          seq: phase.seq,
-          content: phase.buffer,
-        },
-      });
-    }
-    effs.push({
-      kind: "SendHarness",
-      msg: {
-        kind: "generation_completed",
-        session_id: ribId,
-        generation_id: phase.genId,
-      },
-    });
-  } else if (phase._tag !== "Completing") {
-    return noEffects(store);
-  }
-
-  const queuedTurn = Option.getOrNull(state.queuedTurn);
-
-  if (queuedTurn) {
-    const messageId = `msg-ribo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const injected = new Set(state.injectedMessageIds);
-    injected.add(messageId);
-    nextStore = updateStore(store, ev.ocId, (s) => ({
-      ...s,
-      phase: SessionPhase.Streaming("", 0, false, "", ""),
-      queuedTurn: Option.none(),
-      injectedMessageIds: injected,
-    }));
-    const text = formatPrompt(queuedTurn.tree, queuedTurn.event);
-    effs.push({ kind: "InjectPrompt", ocId: ev.ocId, text, messageId });
-  } else {
-    nextStore = updateStore(store, ev.ocId, (s) => ({
-      ...s,
-      phase: SessionPhase.AwaitingTurn(),
-    }));
-  }
-
-  return effects(nextStore, ...effs);
+  return Option.match(state.ribId, {
+    onNone: () => noEffects(store),
+    onSome: (ribId) => {
+      const turn = settleQueuedTurn(store, state);
+      return effects(
+        turn.store,
+        ...completionFrames(ribId, phase).map((msg) => ({ kind: "SendHarness" as const, msg })),
+        ...turn.effects,
+      );
+    },
+  });
 }
 
 function reduceSessionError(
@@ -279,91 +290,89 @@ function reduceSessionError(
   const state = store.sessions.get(ev.ocId);
   if (!state) return noEffects(store);
 
-  const ribId = Option.getOrNull(state.ribId);
   const phase = state.phase;
+  if (phase._tag !== "Streaming") return noEffects(removeSession(store, ev.ocId));
 
-  if (phase._tag === "Streaming" && ribId) {
-    const reason = Option.getOrNull(ev.error) ?? null;
-    const cleared = removeSession(store, ev.ocId);
-    return effects(cleared, {
-      kind: "SendHarness",
-      msg: {
-        kind: "generation_failed",
-        session_id: ribId,
-        generation_id: phase.genId,
-        reason,
-      },
-    });
+  return Option.match(state.ribId, {
+    onNone: () => noEffects(removeSession(store, ev.ocId)),
+    onSome: (ribId) =>
+      effects(removeSession(store, ev.ocId), {
+        kind: "SendHarness",
+        msg: {
+          kind: "generation_failed",
+          session_id: ribId,
+          generation_id: phase.genId,
+          reason: Option.getOrNull(ev.error),
+        },
+      }),
+  });
+}
+
+function routeTurn(store: SessionStore, session: SessionState, turn: UserTurn): Transition {
+  const phase = session.phase;
+
+  if (phase._tag === "Streaming" || phase._tag === "Completing") {
+    if (Option.isSome(session.queuedTurn)) return noEffects(store);
+    return noEffects(updateStore(store, session.ocId, (s) => ({ ...s, queuedTurn: Option.some(turn) })));
   }
 
-  return noEffects(removeSession(store, ev.ocId));
+  if (phase._tag === "Idle" || phase._tag === "AwaitingTurn") {
+    const messageId = generateMessageId();
+    const text = formatPrompt(turn.tree, turn.event);
+    const streaming = updateStore(store, session.ocId, (s) => ({
+      ...s,
+      phase: startStreaming(""),
+      injectedMessageIds: new Set([...s.injectedMessageIds, messageId]),
+    }));
+    return effects(streaming, { kind: "InjectPrompt", ocId: session.ocId, text, messageId });
+  }
+
+  return noEffects(store);
 }
 
 function reduceUserTurnRecv(
   store: SessionStore,
   ev: Extract<InputEvent, { kind: "UserTurnRecv" }>,
 ): Transition {
-  const existing = findSessionByRibId(store, ev.ribId);
+  const turn: UserTurn = { sessionId: ev.ribId, tree: ev.tree, event: ev.event };
 
-  const turn: UserTurn = {
-    sessionId: ev.ribId,
-    tree: ev.tree,
-    event: ev.event,
-  };
-
-  if (!existing) {
-    const pendingTurns = new Map(store.pendingUiTurns);
-    pendingTurns.set(ev.ribId, turn);
-    const nextStore = { ...store, pendingUiTurns: pendingTurns };
-    return effects(nextStore, { kind: "CreateOcSession", ribId: ev.ribId });
-  }
-
-  const phase = existing.phase;
-
-  if (
-    phase._tag === "Streaming" ||
-    phase._tag === "Completing"
-  ) {
-    if (Option.isSome(existing.queuedTurn)) return noEffects(store);
-
-    const queued = updateStore(store, existing.ocId, (s) => ({
-      ...s,
-      queuedTurn: Option.some(turn),
-    }));
-    return noEffects(queued);
-  }
-
-  if (phase._tag === "Idle" || phase._tag === "AwaitingTurn") {
-    const text = formatPrompt(ev.tree, ev.event);
-    const messageId = `msg-ribo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-    const injected = new Set(existing.injectedMessageIds);
-    injected.add(messageId);
-
-    const streaming = updateStore(store, existing.ocId, (s) => ({
-      ...s,
-      phase: SessionPhase.Streaming("", 0, false, "", ""),
-      injectedMessageIds: injected,
-    }));
-    return effects(streaming, {
-      kind: "InjectPrompt",
-      ocId: existing.ocId,
-      text,
-      messageId,
-    });
-  }
-
-  return noEffects(store);
+  return Option.match(findSessionByRibId(store, ev.ribId), {
+    onNone: () => {
+      const pendingTurns = new Map(store.pendingUiTurns);
+      pendingTurns.set(ev.ribId, turn);
+      return effects(
+        { ...store, pendingUiTurns: pendingTurns },
+        { kind: "CreateOcSession", ribId: ev.ribId },
+      );
+    },
+    onSome: (session) => routeTurn(store, session, turn),
+  });
 }
 
 function reduceOcSessionCreated(
   store: SessionStore,
   ev: Extract<InputEvent, { kind: "OcSessionCreated" }>,
 ): Transition {
-  const turn = store.pendingUiTurns.get(ev.ribId) ?? null;
-
   const pendingTurns = new Map(store.pendingUiTurns);
   pendingTurns.delete(ev.ribId);
+
+  const inject = Option.map(Option.fromNullable(store.pendingUiTurns.get(ev.ribId)), (turn) => {
+    const messageId = generateMessageId();
+    return { messageId, text: formatPrompt(turn.tree, turn.event) };
+  });
+
+  const state: SessionState = {
+    ...makeSession(ev.ocId),
+    ribId: Option.some(ev.ribId),
+    phase: startStreaming(""),
+    queuedTurn: Option.none(),
+    injectedMessageIds: new Set(
+      Option.match(inject, {
+        onNone: () => [],
+        onSome: (i) => [i.messageId],
+      }),
+    ),
+  };
 
   const effs: Effect[] = [
     {
@@ -375,27 +384,15 @@ function reduceOcSessionCreated(
         nonce: "pending",
       },
     },
+    ...Option.toArray(inject).map((i) => ({
+      kind: "InjectPrompt" as const,
+      ocId: ev.ocId,
+      text: i.text,
+      messageId: i.messageId,
+    })),
   ];
 
-  let injectedIds = new Set<string>();
-
-  if (turn) {
-    const text = formatPrompt(turn.tree, turn.event);
-    const messageId = `msg-ribo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    injectedIds.add(messageId);
-    effs.push({ kind: "InjectPrompt", ocId: ev.ocId, text, messageId });
-  }
-
-  const state: SessionState = {
-    ...makeSession(ev.ocId),
-    ribId: Option.some(ev.ribId),
-    phase: SessionPhase.Streaming("", 0, false, "", ""),
-    queuedTurn: Option.none(),
-    injectedMessageIds: injectedIds,
-  };
-
-  const nextStore = { ...putSession(store, state), pendingUiTurns: pendingTurns };
-  return effects(nextStore, ...effs);
+  return effects({ ...putSession(store, state), pendingUiTurns: pendingTurns }, ...effs);
 }
 
 function reduceWsOpen(store: SessionStore): Transition {

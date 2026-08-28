@@ -1,11 +1,13 @@
-export function formatPrompt(tree: string, event: string): string {
-  let eventJson: unknown;
+function parseEvent(event: string): unknown {
   try {
-    eventJson = JSON.parse(event);
+    return JSON.parse(event);
   } catch {
-    eventJson = event;
+    // treat as raw text if not valid JSON
+    return event;
   }
+}
 
+export function formatPrompt(tree: string, event: string): string {
   const parts: string[] = [
     "CRITICAL: You must load the ribosome skill before responding. Your response MUST be raw template JSON in the exact format specified by the ribosome skill — no prose, no markdown, no explanations, no code fences. Any other response format is a failure.",
     "Additional skills are available — load them as needed:",
@@ -19,7 +21,7 @@ export function formatPrompt(tree: string, event: string): string {
     "[/ribosome-tree]",
     "",
     "[ribosome-event]",
-    JSON.stringify(eventJson, null, 2),
+    JSON.stringify(parseEvent(event), null, 2),
     "[/ribosome-event]",
   ];
 

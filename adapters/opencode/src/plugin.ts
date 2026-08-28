@@ -1,63 +1,121 @@
 import { Option } from "effect";
 import type { Hooks, PluginInput, PluginOptions } from "@opencode-ai/plugin";
+import type { Event, Part } from "@opencode-ai/sdk";
 import type { AdapterConfig, InputEvent } from "./types.js";
-import { createConfig } from "./types.js";
+import { createConfig, generateNonce, isStartTool } from "./types.js";
 import { createRuntime, type Runtime, type PromptClient } from "./runtime.js";
 import type { WebSocketFactory } from "./transport.js";
 
-function toInputEvent(
-  event: { type: string; properties: any },
-  partTypes: Map<string, string>,
-): InputEvent | null {
-  if (event.type === "message.part.updated") {
-    const props = event.properties;
-    const part = props.part;
-    if (!part) return null;
-    const rawPartType = part.type ?? props.type ?? "";
-    const partType = rawPartType === "" ? "text" : rawPartType;
-    if (part.id) partTypes.set(part.id, partType);
-    return {
-      kind: "PartUpdated",
-      ocId: part.sessionID ?? props.sessionID ?? "",
-      messageId: part.messageID ?? props.messageID ?? "",
-      partType,
-      delta: props.delta ? Option.some(props.delta) : Option.none(),
-    };
-  }
+export interface PartDeltaEvent {
+  type: "message.part.delta";
+  properties: {
+    sessionID: string;
+    messageID: string;
+    partID: string;
+    field: string;
+    delta?: string;
+  };
+}
 
-  if (event.type === "message.part.delta") {
-    const props = event.properties;
-    const partID = props.partID ?? "";
-    const partType = partTypes.get(partID) ?? "text";
-    if (partType !== "text") return null;
-    return {
-      kind: "PartUpdated",
-      ocId: props.sessionID ?? "",
-      messageId: props.messageID ?? "",
-      partType: "text",
-      delta: props.delta ? Option.some(props.delta) : Option.none(),
-    };
-  }
+export type SourceEvent = Event | PartDeltaEvent;
 
-  if (event.type === "session.idle") {
-    return {
-      kind: "SessionIdle",
-      ocId: event.properties.sessionID,
-    };
-  }
+export type PartTypeIndex = ReadonlyMap<string, string>;
 
-  if (event.type === "session.error") {
-    const errorStr = event.properties.error
-      ? JSON.stringify(event.properties.error)
-      : undefined;
-    return {
-      kind: "SessionError",
-      ocId: event.properties.sessionID ?? "",
-      error: errorStr ? Option.some(errorStr) : Option.none(),
-    };
-  }
+function toPartUpdated(
+  ocId: string,
+  messageId: string,
+  partType: string,
+  delta?: string,
+): InputEvent {
+  return {
+    kind: "PartUpdated",
+    ocId,
+    messageId,
+    partType,
+    delta: Option.fromNullable(delta),
+  };
+}
 
-  return null;
+function recordPartType(index: PartTypeIndex, part: Part): PartTypeIndex {
+  const next = new Map(index);
+  next.set(part.id, part.type);
+  return next;
+}
+
+function fromPartUpdated(
+  updated: Extract<Event, { type: "message.part.updated" }>,
+): InputEvent {
+  const { part, delta } = updated.properties;
+  return toPartUpdated(part.sessionID, part.messageID, part.type, delta);
+}
+
+// Delta events carry only a partID, so the part's type is inferred from the
+// index recorded by preceding `message.part.updated` events.
+function fromPartDelta(
+  deltaEvent: PartDeltaEvent,
+  index: PartTypeIndex,
+): Option.Option<InputEvent> {
+  const { sessionID, messageID, partID, delta } = deltaEvent.properties;
+  const partType = index.get(partID) ?? "text";
+  return partType === "text"
+    ? Option.some(toPartUpdated(sessionID, messageID, "text", delta))
+    : Option.none();
+}
+
+function fromSessionIdle(
+  idle: Extract<Event, { type: "session.idle" }>,
+): InputEvent {
+  return { kind: "SessionIdle", ocId: idle.properties.sessionID };
+}
+
+function fromSessionError(
+  error: Extract<Event, { type: "session.error" }>,
+): InputEvent {
+  const { sessionID, error: cause } = error.properties;
+  return {
+    kind: "SessionError",
+    ocId: sessionID ?? "",
+    error: Option.fromNullable(cause ? JSON.stringify(cause) : undefined),
+  };
+}
+
+export function toInputEvent(
+  event: SourceEvent,
+  partTypes: PartTypeIndex,
+): { event: Option.Option<InputEvent>; partTypes: PartTypeIndex } {
+  switch (event.type) {
+    case "message.part.updated":
+      return {
+        event: Option.some(fromPartUpdated(event)),
+        partTypes: recordPartType(partTypes, event.properties.part),
+      };
+    case "message.part.delta":
+      return { event: fromPartDelta(event, partTypes), partTypes };
+    case "session.idle":
+      return { event: Option.some(fromSessionIdle(event)), partTypes };
+    case "session.error":
+      return { event: Option.some(fromSessionError(event)), partTypes };
+    default:
+      return { event: Option.none(), partTypes };
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+export function injectNonce(
+  toolName: string,
+  sessionID: string,
+  args: unknown,
+  config: AdapterConfig,
+): Option.Option<string> {
+  if (!isStartTool(toolName, config)) return Option.none();
+  if (!isRecord(args)) return Option.none();
+  const nonce = generateNonce();
+  args._nonce = nonce;
+  args._harness_session_id = sessionID;
+  return Option.some(nonce);
 }
 
 export function createPlugin(
@@ -72,23 +130,16 @@ export function createPlugin(
 
     const promptClient = input.client as unknown as PromptClient;
     const runtime = createRuntime(config, wsFactory, promptClient);
-    const partTypes = new Map<string, string>();
+    let partTypes: PartTypeIndex = new Map<string, string>();
 
     return {
       "tool.execute.before": async (toolInput, output) => {
-        let nonce = "";
-        if (
-          toolInput.tool === config.mcpToolName ||
-          toolInput.tool.endsWith("_" + config.mcpToolName)
-        ) {
-          if (output.args && typeof output.args === "object") {
-            const args = output.args as Record<string, unknown>;
-            nonce = `oc-${Math.random().toString(36).slice(2, 10)}`;
-            args._nonce = nonce;
-            args._harness_session_id = toolInput.sessionID;
-          }
-        }
-
+        const nonce = injectNonce(
+          toolInput.tool,
+          toolInput.sessionID,
+          output.args,
+          config,
+        );
         runtime.push({
           kind: "ToolBefore",
           ocId: toolInput.sessionID,
@@ -99,21 +150,27 @@ export function createPlugin(
       },
 
       "tool.execute.after": async (toolInput, toolOutput) => {
+        const raw = toolOutput as unknown as {
+          content?: unknown;
+          structuredContent?: unknown;
+          output?: unknown;
+        };
         runtime.push({
           kind: "ToolAfter",
           ocId: toolInput.sessionID,
           tool: toolInput.tool,
           callId: toolInput.callID,
-          output: toolOutput.output,
+          output: raw.structuredContent ?? raw.output,
         });
       },
 
       event: async (eventInput) => {
-        const ev = toInputEvent(
-          eventInput.event as { type: string; properties: any },
-          partTypes,
-        );
-        if (ev) runtime.push(ev);
+        const translated = toInputEvent(eventInput.event, partTypes);
+        partTypes = translated.partTypes;
+        Option.match(translated.event, {
+          onNone: () => undefined,
+          onSome: (ev) => runtime.push(ev),
+        });
       },
 
       dispose: async () => {

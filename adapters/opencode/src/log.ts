@@ -21,16 +21,20 @@ export function resetLogSink(): void {
   currentSink = noop;
 }
 
+export function writeLog(level: LogLevel, category: string, message: string, ocId?: string): void {
+  currentSink({ level, category, message, ocId });
+}
+
 export function logInfo(category: string, message: string, ocId?: string): void {
-  currentSink({ level: "info", category, message, ocId });
+  writeLog("info", category, message, ocId);
 }
 
 export function logWarn(category: string, message: string, ocId?: string): void {
-  currentSink({ level: "warn", category, message, ocId });
+  writeLog("warn", category, message, ocId);
 }
 
 export function logError(category: string, message: string, ocId?: string): void {
-  currentSink({ level: "error", category, message, ocId });
+  writeLog("error", category, message, ocId);
 }
 
 export function createStderrSink(): LogSink {

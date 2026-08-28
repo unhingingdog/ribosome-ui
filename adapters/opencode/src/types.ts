@@ -23,6 +23,8 @@ export interface SessionState {
   readonly injectedMessageIds: ReadonlySet<string>;
 }
 
+export type StreamingPhase = Extract<SessionPhase, { readonly _tag: "Streaming" }>;
+
 export interface SessionStore {
   readonly sessions: ReadonlyMap<string, SessionState>;
   readonly pendingUiTurns: ReadonlyMap<string, UserTurn>;
@@ -35,13 +37,13 @@ export interface UserTurn {
 }
 
 export type InputEvent =
-  | { readonly kind: "ToolBefore"; readonly ocId: string; readonly tool: string; readonly callId: string; readonly nonce: string }
+  | { readonly kind: "ToolBefore"; readonly ocId: string; readonly tool: string; readonly callId: string; readonly nonce: Option.Option<string> }
   | {
       readonly kind: "ToolAfter";
       readonly ocId: string;
       readonly tool: string;
       readonly callId: string;
-      readonly output: string;
+      readonly output: unknown;
     }
   | {
       readonly kind: "PartUpdated";
@@ -113,13 +115,13 @@ export function setPhase(state: SessionState, phase: SessionPhase): SessionState
   return { ...state, phase };
 }
 
-export function findSessionByRibId(store: SessionStore, ribId: string): SessionState | undefined {
+export function findSessionByRibId(store: SessionStore, ribId: string): Option.Option<SessionState> {
   for (const s of store.sessions.values()) {
     if (Option.match(s.ribId, { onNone: () => false, onSome: (id) => id === ribId })) {
-      return s;
+      return Option.some(s);
     }
   }
-  return undefined;
+  return Option.none();
 }
 
 export function updateStore(

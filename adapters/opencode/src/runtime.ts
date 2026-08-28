@@ -1,6 +1,6 @@
-import { Subject, Subscription } from "rxjs";
+import { Subject, type Subscription } from "rxjs";
 import { Either, Option } from "effect";
-import type { AdapterConfig, Effect, InputEvent, SessionStore } from "./types.js";
+import type { AdapterConfig, Effect, HarnessOutbound, InputEvent, SessionStore } from "./types.js";
 import { emptyStore } from "./types.js";
 import { reduce } from "./reduce.js";
 import { decodeHarnessInbound } from "./protocol.js";
@@ -32,6 +32,10 @@ export interface Runtime {
   shutdown(): void;
 }
 
+function whenSome<T>(opt: Option.Option<T>, f: (value: T) => void): void {
+  Option.match(opt, { onNone: () => undefined, onSome: f });
+}
+
 export function createRuntime(
   config: AdapterConfig,
   wsFactory: WebSocketFactory,
@@ -39,59 +43,79 @@ export function createRuntime(
 ): Runtime {
   const events = new Subject<InputEvent>();
   let store: SessionStore = emptyStore();
-  let flushTimer: ReturnType<typeof setInterval> | null = null;
-  let wsSub: Subscription | null = null;
-  let transport: Transport | null = null;
+  let flushTimer: Option.Option<ReturnType<typeof setInterval>> = Option.none();
+  let wsSub: Option.Option<Subscription> = Option.none();
+  let transport: Option.Option<Transport> = Option.none();
+
+  function sendHarness(msg: HarnessOutbound): void {
+    whenSome(transport, (t) => t.outbound.next(msg));
+  }
+
+  function createOcSession(ribId: string): void {
+    logInfo("session", "creating oc session for UI-initiated turn", undefined);
+    promptClient.session
+      .create({ body: { title: "Ribosome" } })
+      .then((result) => {
+        if (result.data?.id) {
+          logInfo("session", `created oc session ${result.data.id}`, result.data.id);
+          events.next({ kind: "OcSessionCreated", ocId: result.data.id, ribId });
+        } else {
+          logError("session", "create returned no id", undefined);
+        }
+      })
+      .catch((e) => {
+        logError("session", `create failed: ${String(e)}`, undefined);
+      });
+  }
+
+  function injectPrompt(ocId: string, text: string, messageId: string): void {
+    logInfo("inject", "injecting prompt", ocId);
+    promptClient.session
+      .promptAsync({
+        path: { id: ocId },
+        body: { messageID: messageId, parts: [{ type: "text", text }] },
+      })
+      .then((res) => {
+        if (res.response.status >= 400) {
+          const detail = res.error === undefined ? "none" : JSON.stringify(res.error);
+          logError("inject", `promptAsync failed status=${res.response.status} error=${detail}`, ocId);
+        }
+      })
+      .catch((e) => {
+        logError("inject", `failed: ${String(e)}`, ocId);
+      });
+  }
+
+  function logEffect(eff: Effect): void {
+    if (eff.kind !== "SendHarness") return;
+    const msg = eff.msg;
+    switch (msg.kind) {
+      case "delta":
+        logInfo("delta", `gen=${msg.generation_id} seq=${msg.seq} bytes=${msg.content.length}`, msg.session_id);
+        break;
+      case "generation_completed":
+        logInfo("generation", `completed gen=${msg.generation_id}`, msg.session_id);
+        break;
+      case "generation_failed":
+        logWarn("generation", `failed gen=${msg.generation_id} reason=${msg.reason ?? "none"}`, msg.session_id);
+        break;
+      case "attach":
+        logInfo("harness", `attach ribosome=${msg.session_id} oc=${msg.harness_session_id}`, msg.harness_session_id);
+        break;
+    }
+  }
 
   function executeEffect(eff: Effect): void {
     switch (eff.kind) {
       case "SendHarness":
-        if (transport) {
-          transport.outbound.next(eff.msg);
-        }
+        sendHarness(eff.msg);
         break;
-
       case "CreateOcSession":
-        logInfo("session", "creating oc session for UI-initiated turn", undefined);
-        promptClient.session
-          .create({ body: { title: "Ribosome" } })
-          .then((result) => {
-            if (result.data?.id) {
-              logInfo("session", `created oc session ${result.data.id}`, result.data.id);
-              events.next({
-                kind: "OcSessionCreated",
-                ocId: result.data.id,
-                ribId: eff.ribId,
-              });
-            } else {
-              logError("session", "create returned no id", undefined);
-            }
-          })
-          .catch((e) => {
-            logError("session", `create failed: ${String(e)}`, undefined);
-          });
+        createOcSession(eff.ribId);
         break;
-
-      case "InjectPrompt": {
-        logInfo("inject", "injecting prompt", eff.ocId);
-        promptClient.session
-          .promptAsync({
-            path: { id: eff.ocId },
-            body: {
-              messageID: eff.messageId,
-              parts: [{ type: "text", text: eff.text }],
-            },
-          })
-          .then((res) => {
-            if (res.response.status >= 400) {
-              logError("inject", `promptAsync failed status=${res.response.status} error=${JSON.stringify(res.error ?? null)}`, eff.ocId);
-            }
-          })
-          .catch((e) => {
-            logError("inject", `failed: ${String(e)}`, eff.ocId);
-          });
+      case "InjectPrompt":
+        injectPrompt(eff.ocId, eff.text, eff.messageId);
         break;
-      }
     }
   }
 
@@ -100,18 +124,7 @@ export function createRuntime(
     store = transition.store;
 
     for (const eff of transition.effects) {
-      if (eff.kind === "SendHarness") {
-        const msg = eff.msg;
-        if (msg.kind === "delta") {
-          logInfo("delta", `gen=${msg.generation_id} seq=${msg.seq} bytes=${msg.content.length}`, msg.session_id);
-        } else if (msg.kind === "generation_completed") {
-          logInfo("generation", `completed gen=${msg.generation_id}`, msg.session_id);
-        } else if (msg.kind === "generation_failed") {
-          logWarn("generation", `failed gen=${msg.generation_id} reason=${msg.reason ?? "none"}`, msg.session_id);
-        } else if (msg.kind === "attach") {
-          logInfo("harness", `attach ribosome=${msg.session_id} oc=${msg.harness_session_id}`, msg.harness_session_id);
-        }
-      }
+      logEffect(eff);
       executeEffect(eff);
     }
   }
@@ -122,7 +135,7 @@ export function createRuntime(
     complete: () => {},
   });
 
-  transport = createTransport(
+  const tr = createTransport(
     `${config.serverUrl}/v1/harness`,
     wsFactory,
     () => {
@@ -134,8 +147,9 @@ export function createRuntime(
       events.next({ kind: "WsClosed" });
     },
   );
+  transport = Option.some(tr);
 
-  wsSub = transport.inbound.subscribe({
+  const sub = tr.inbound.subscribe({
     next: (data) => {
       const decoded = decodeHarnessInbound(data);
       if (Either.isRight(decoded)) {
@@ -149,16 +163,18 @@ export function createRuntime(
       }
     },
   });
+  wsSub = Option.some(sub);
 
   logInfo("adapter", "plugin loaded", undefined);
 
-  flushTimer = setInterval(() => {
+  const timer = setInterval(() => {
     for (const [ocId, state] of store.sessions) {
       if (state.phase._tag === "Streaming" && state.phase.buffer.length > 0) {
         events.next({ kind: "FlushBatch", ocId });
       }
     }
   }, FLUSH_INTERVAL_MS);
+  flushTimer = Option.some(timer);
 
   return {
     push(event: InputEvent): void {
@@ -167,18 +183,12 @@ export function createRuntime(
 
     shutdown(): void {
       logInfo("adapter", "disposing", undefined);
-      if (flushTimer) {
-        clearInterval(flushTimer);
-        flushTimer = null;
-      }
-      if (wsSub) {
-        wsSub.unsubscribe();
-        wsSub = null;
-      }
-      if (transport) {
-        transport.close();
-        transport = null;
-      }
+      whenSome(flushTimer, clearInterval);
+      flushTimer = Option.none();
+      whenSome(wsSub, (s) => s.unsubscribe());
+      wsSub = Option.none();
+      whenSome(transport, (t) => t.close());
+      transport = Option.none();
       events.complete();
     },
   };

@@ -2,9 +2,9 @@ export { createPlugin } from "./plugin.js";
 export { createRuntime, type Runtime, type PromptClient } from "./runtime.js";
 export { createTransport, type Transport, type WebSocketFactory, type WebSocketLike, FLUSH_INTERVAL_MS, FLUSH_BYTE_THRESHOLD } from "./transport.js";
 export { reduce } from "./reduce.js";
-export { encodeHarnessOutbound, decodeHarnessInbound, type UserTurnMessage, type HarnessInbound } from "./protocol.js";
+export { encodeHarnessOutbound, decodeHarnessInbound, type UserTurnMessage, type HarnessInbound, type DecodeError } from "./protocol.js";
 export { formatPrompt } from "./skills.js";
-export { logInfo, logWarn, logError, setLogSink, resetLogSink, createStderrSink, type LogLevel, type LogEntry, type LogSink } from "./log.js";
+export { logInfo, logWarn, logError, writeLog, setLogSink, resetLogSink, createStderrSink, type LogLevel, type LogEntry, type LogSink } from "./log.js";
 export {
   createConfig,
   emptyStore,
@@ -19,6 +19,7 @@ export {
   type AdapterConfig,
   type SessionPhase as SessionPhaseT,
   type SessionState,
+  type StreamingPhase,
   type SessionStore,
   type UserTurn,
   type InputEvent,

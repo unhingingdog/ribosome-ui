@@ -1,4 +1,5 @@
-import { Subject, Observable, Subscription } from "rxjs";
+import { Subject, type Observable, type Subscription } from "rxjs";
+import { Option } from "effect";
 import type { HarnessOutbound } from "./types.js";
 import { encodeHarnessOutbound } from "./protocol.js";
 
@@ -25,6 +26,10 @@ export interface Transport {
   close(): void;
 }
 
+function whenSome<T>(opt: Option.Option<T>, f: (value: T) => void): void {
+  Option.match(opt, { onNone: () => undefined, onSome: f });
+}
+
 export function createTransport(
   url: string,
   factory: WebSocketFactory,
@@ -34,55 +39,52 @@ export function createTransport(
   const outbound = new Subject<HarnessOutbound>();
   const inbound = new Subject<string>();
 
-  let ws: WebSocketLike | null = null;
+  let ws: Option.Option<WebSocketLike> = Option.none();
   let shouldReconnect = true;
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let sendSub: Subscription;
+  let reconnectTimer: Option.Option<ReturnType<typeof setTimeout>> = Option.none();
 
   function connect() {
-    ws = factory(url);
+    const socket = factory(url);
+    ws = Option.some(socket);
 
-    ws.onopen = () => {
+    socket.onopen = () => {
       if (onOpen) onOpen();
     };
 
-    ws.onmessage = (ev: MessageEvent) => {
+    socket.onmessage = (ev: MessageEvent) => {
       inbound.next(String(ev.data));
     };
 
-    ws.onclose = () => {
+    socket.onclose = () => {
       if (onClose) onClose();
       if (shouldReconnect) {
-        reconnectTimer = setTimeout(() => connect(), RECONNECT_DELAY_MS);
+        reconnectTimer = Option.some(setTimeout(() => connect(), RECONNECT_DELAY_MS));
       }
     };
 
-    ws.onerror = () => {
+    socket.onerror = () => {
       // close will follow and trigger reconnect
     };
   }
 
   function sendFrame(data: string) {
-    if (!ws || ws.readyState !== 1) return;
-    if (ws.bufferedAmount > FLUSH_BYTE_THRESHOLD) {
-      setTimeout(() => sendFrame(data), FLUSH_INTERVAL_MS);
-      return;
-    }
-    try {
-      ws.send(data);
-    } catch {
-      // will reconnect via onclose
-    }
+    whenSome(ws, (socket) => {
+      if (socket.readyState !== 1) return;
+      if (socket.bufferedAmount > FLUSH_BYTE_THRESHOLD) {
+        setTimeout(() => sendFrame(data), FLUSH_INTERVAL_MS);
+        return;
+      }
+      try {
+        socket.send(data);
+      } catch {
+        // will reconnect via onclose
+      }
+    });
   }
 
-  sendSub = outbound
-    .pipe(
-      // Coalesce rapid deltas into single frames
-      // Each message is still a separate JSON object, but they share TCP frames
-    )
-    .subscribe({
-      next: (msg) => sendFrame(encodeHarnessOutbound(msg)),
-    });
+  const sendSub: Subscription = outbound.subscribe({
+    next: (msg) => sendFrame(encodeHarnessOutbound(msg)),
+  });
 
   connect();
 
@@ -91,17 +93,13 @@ export function createTransport(
     inbound,
     close() {
       shouldReconnect = false;
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
+      whenSome(reconnectTimer, clearTimeout);
+      reconnectTimer = Option.none();
       sendSub.unsubscribe();
       outbound.complete();
       inbound.complete();
-      if (ws) {
-        ws.close(1000, "shutdown");
-        ws = null;
-      }
+      whenSome(ws, (socket) => socket.close(1000, "shutdown"));
+      ws = Option.none();
     },
   };
 }

@@ -69,7 +69,7 @@ describe("runtime — integration", () => {
       ocId: "oc-1",
       tool: "start",
       callId: "call-1",
-      nonce: "nonce-abc",
+      nonce: Option.some("nonce-abc"),
     });
     rt.push({
       kind: "ToolAfter",
@@ -96,7 +96,7 @@ describe("runtime — integration", () => {
     fake.fireOpen();
 
     // Kickoff
-    rt.push({ kind: "ToolBefore", ocId: "oc-1", tool: "start", callId: "c1", nonce: "n1" });
+    rt.push({ kind: "ToolBefore", ocId: "oc-1", tool: "start", callId: "c1", nonce: Option.some("n1") });
     rt.push({
       kind: "ToolAfter",
       ocId: "oc-1",
@@ -145,7 +145,7 @@ describe("runtime — integration", () => {
     fake.fireOpen();
 
     // Kickoff + complete
-    rt.push({ kind: "ToolBefore", ocId: "oc-1", tool: "start", callId: "c1", nonce: "n1" });
+    rt.push({ kind: "ToolBefore", ocId: "oc-1", tool: "start", callId: "c1", nonce: Option.some("n1") });
     rt.push({
       kind: "ToolAfter",
       ocId: "oc-1",
@@ -200,7 +200,7 @@ describe("runtime — integration", () => {
     fake.fireOpen();
 
     // Kickoff + complete
-    rt.push({ kind: "ToolBefore", ocId: "oc-1", tool: "start", callId: "c1", nonce: "n1" });
+    rt.push({ kind: "ToolBefore", ocId: "oc-1", tool: "start", callId: "c1", nonce: Option.some("n1") });
     rt.push({
       kind: "ToolAfter",
       ocId: "oc-1",
